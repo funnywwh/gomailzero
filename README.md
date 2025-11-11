@@ -19,17 +19,38 @@
 
 ### 安装
 
+#### 方式一：使用安装脚本（推荐）
+
 ```bash
 # 从源码构建
 git clone https://github.com/funnywwh/gomailzero.git
 cd gomailzero
 make build
 
-# 或下载预编译二进制
-wget https://github.com/funnywwh/gomailzero/releases/download/v0.9.0/gmz-linux-amd64 -O /usr/local/bin/gmz
-chmod +x /usr/local/bin/gmz
+# 运行安装脚本
+sudo ./scripts/install.sh ./bin/gmz
+```
 
-# 或使用 Docker
+#### 方式二：手动安装
+
+```bash
+# 从源码构建
+git clone https://github.com/funnywwh/gomailzero.git
+cd gomailzero
+make build
+
+# 复制二进制
+sudo cp bin/gmz /usr/local/bin/
+sudo chmod +x /usr/local/bin/gmz
+
+# 创建配置目录
+sudo mkdir -p /etc/gmz
+sudo cp configs/gmz.yml.example /etc/gmz/gmz.yml
+```
+
+#### 方式三：使用 Docker
+
+```bash
 docker pull funnywwh/gomailzero:latest
 ```
 
@@ -44,6 +65,24 @@ vim /etc/gmz/gmz.yml
 ```
 
 ### 运行
+
+#### 使用 systemd 服务（推荐）
+
+```bash
+# 启动服务
+sudo systemctl start gmz
+
+# 查看状态
+sudo systemctl status gmz
+
+# 查看日志
+sudo journalctl -u gmz -f
+
+# 停止服务
+sudo systemctl stop gmz
+```
+
+#### 直接运行
 
 ```bash
 # 直接运行
