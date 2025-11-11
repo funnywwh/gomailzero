@@ -104,7 +104,7 @@ onMounted(() => {
     // 加载原邮件并设置转发内容
     api.getMail(forwardId).then((mail) => {
       form.value.subject = (route.query.subject as string) || `Fwd: ${mail.subject || ''}`
-      form.value.body = `\n\n--- 转发邮件 ---\n发件人: ${mail.from}\n日期: ${new Date(mail.received_at).toLocaleString()}\n主题: ${mail.subject || ''}\n收件人: ${mail.to?.join(', ') || ''}\n\n${mail.body ? new TextDecoder().decode(mail.body) : ''}`
+      form.value.body = `\n\n--- 转发邮件 ---\n发件人: ${mail.from}\n日期: ${new Date(mail.received_at).toLocaleString()}\n主题: ${mail.subject || ''}\n收件人: ${mail.to?.join(', ') || ''}\n\n${mail.body || mail.body_html || ''}`
     }).catch((err) => {
       console.error('加载邮件失败:', err)
     })

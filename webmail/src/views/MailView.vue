@@ -21,7 +21,11 @@
           <div><strong>时间:</strong> {{ formatDate(mail.received_at) }}</div>
         </div>
       </div>
-      <div class="mail-body" v-html="mail.body"></div>
+      <div class="mail-body">
+        <div v-if="mail.body_html" class="mail-body-html" v-html="mail.body_html"></div>
+        <div v-else-if="mail.body" class="mail-body-text">{{ mail.body }}</div>
+        <div v-else class="mail-body-empty">邮件正文为空</div>
+      </div>
     </div>
   </div>
 </template>
