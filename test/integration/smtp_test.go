@@ -4,12 +4,7 @@ package integration
 
 import (
 	"context"
-	"crypto/tls"
-	"fmt"
-	"net"
-	"net/smtp"
 	"testing"
-	"time"
 
 	"github.com/gomailzero/gmz/internal/crypto"
 	"github.com/gomailzero/gmz/internal/storage"

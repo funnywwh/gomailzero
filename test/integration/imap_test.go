@@ -4,7 +4,6 @@ package integration
 
 import (
 	"context"
-	"crypto/tls"
 	"testing"
 
 	"github.com/gomailzero/gmz/internal/crypto"
