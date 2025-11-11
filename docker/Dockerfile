@@ -1,0 +1,65 @@
+# 多阶段构建 Dockerfile for GoMailZero
+
+# 构建阶段
+FROM golang:1.23-alpine AS builder
+
+# 安装必要的构建工具
+RUN apk add --no-cache git make
+
+# 设置工作目录
+WORKDIR /build
+
+# 复制 go mod 文件
+COPY go.mod go.sum ./
+
+# 下载依赖
+RUN go mod download
+
+# 复制源代码
+COPY . .
+
+# 构建二进制文件
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags "-w -s -X main.Version=${VERSION:-dev} -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    -o gmz ./cmd/gmz
+
+# 运行阶段
+FROM alpine:latest
+
+# 安装必要的运行时依赖
+RUN apk add --no-cache ca-certificates tzdata && \
+    update-ca-certificates
+
+# 创建非 root 用户
+RUN addgroup -g 1000 gmz && \
+    adduser -D -u 1000 -G gmz gmz
+
+# 设置工作目录
+WORKDIR /app
+
+# 从构建阶段复制二进制文件
+COPY --from=builder /build/gmz /app/gmz
+
+# 复制配置示例
+COPY --from=builder /build/configs/gmz.yml.example /app/configs/gmz.yml.example
+
+# 创建必要的目录
+RUN mkdir -p /app/data /app/logs /app/certs && \
+    chown -R gmz:gmz /app
+
+# 切换到非 root 用户
+USER gmz
+
+# 暴露端口
+EXPOSE 25 465 587 993 8080 9090
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+# 设置入口点
+ENTRYPOINT ["/app/gmz"]
+
+# 默认命令
+CMD ["-c", "/app/configs/gmz.yml.example"]
+

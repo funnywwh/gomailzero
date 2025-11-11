@@ -168,9 +168,12 @@ jobs:
           context: .
           file: ./docker/Dockerfile
           push: ${{ steps.docker-creds.outputs.has_creds == 'true' }}
+          load: ${{ steps.docker-creds.outputs.has_creds != 'true' }}
           tags: |
             gomailzero/gmz:latest
             gomailzero/gmz:${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ github.ref_name }}
 
