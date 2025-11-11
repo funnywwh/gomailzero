@@ -81,8 +81,9 @@ type WebMailConfig struct {
 
 // AdminConfig 管理配置
 type AdminConfig struct {
-	APIKey string `yaml:"api_key" mapstructure:"api_key"`
-	Port   int    `yaml:"port" mapstructure:"port"`
+	APIKey    string `yaml:"api_key" mapstructure:"api_key"`
+	JWTSecret string `yaml:"jwt_secret" mapstructure:"jwt_secret"`
+	Port      int    `yaml:"port" mapstructure:"port"`
 }
 
 // LogConfig 日志配置

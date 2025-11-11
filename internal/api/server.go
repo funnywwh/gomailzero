@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gomailzero/gmz/internal/auth"
+	"github.com/gomailzero/gmz/internal/crypto"
 	"github.com/gomailzero/gmz/internal/logger"
 	"github.com/gomailzero/gmz/internal/storage"
 )
@@ -21,9 +24,11 @@ type Server struct {
 
 // Config API 配置
 type Config struct {
-	Port    int
-	APIKey  string
-	Storage storage.Driver
+	Port       int
+	APIKey     string
+	Storage    storage.Driver
+	JWTManager *auth.JWTManager
+	TOTPManager *auth.TOTPManager
 }
 
 // NewServer 创建 API 服务器
@@ -38,24 +43,29 @@ func NewServer(cfg *Config) *Server {
 	// 健康检查
 	router.GET("/health", healthHandler)
 
+	// 公开端点：登录
+	router.POST("/api/v1/auth/login", loginHandler(cfg.Storage, cfg.JWTManager, cfg.TOTPManager))
+
 	// API 路由组
 	api := router.Group("/api/v1")
 	// 支持 API Key 和 JWT 两种认证方式
-	api.Use(authMiddleware(cfg.APIKey))
+	api.Use(authMiddleware(cfg.APIKey, cfg.JWTManager))
 
-	// 域名管理
+	// 域名管理（敏感操作需要 TOTP）
 	api.GET("/domains", listDomainsHandler(cfg.Storage))
-	api.POST("/domains", createDomainHandler(cfg.Storage))
+	api.POST("/domains", totpRequiredMiddleware(cfg.TOTPManager, cfg.Storage), createDomainHandler(cfg.Storage))
 	api.GET("/domains/:name", getDomainHandler(cfg.Storage))
-	api.PUT("/domains/:name", updateDomainHandler(cfg.Storage))
-	api.DELETE("/domains/:name", deleteDomainHandler(cfg.Storage))
+	api.PUT("/domains/:name", totpRequiredMiddleware(cfg.TOTPManager, cfg.Storage), updateDomainHandler(cfg.Storage))
+	api.DELETE("/domains/:name", totpRequiredMiddleware(cfg.TOTPManager, cfg.Storage), deleteDomainHandler(cfg.Storage))
 
 	// 用户管理
 	api.GET("/users", listUsersHandler(cfg.Storage))
-	api.POST("/users", createUserHandler(cfg.Storage))
+	// 创建用户需要 TOTP（如果启用）
+	api.POST("/users", totpRequiredMiddleware(cfg.TOTPManager, cfg.Storage), createUserHandler(cfg.Storage))
 	api.GET("/users/:email", getUserHandler(cfg.Storage))
-	api.PUT("/users/:email", updateUserHandler(cfg.Storage))
-	api.DELETE("/users/:email", deleteUserHandler(cfg.Storage))
+	// 更新和删除用户需要 TOTP（如果启用）
+	api.PUT("/users/:email", totpRequiredMiddleware(cfg.TOTPManager, cfg.Storage), updateUserHandler(cfg.Storage))
+	api.DELETE("/users/:email", totpRequiredMiddleware(cfg.TOTPManager, cfg.Storage), deleteUserHandler(cfg.Storage))
 
 	// 别名管理
 	api.GET("/aliases", listAliasesHandler(cfg.Storage))
@@ -133,17 +143,54 @@ func loggerMiddleware() gin.HandlerFunc {
 	}
 }
 
-// authMiddleware 认证中间件
-func authMiddleware(apiKey string) gin.HandlerFunc {
+// authMiddleware 认证中间件（支持 API Key 和 JWT）
+func authMiddleware(apiKey string, jwtManager *auth.JWTManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 从 Header 获取 API Key
+		// 优先检查 API Key
 		key := c.GetHeader("X-API-Key")
 		if key == "" {
-			// 尝试从 Query 参数获取
 			key = c.Query("api_key")
 		}
 
-		if key != apiKey {
+		if key == apiKey {
+			// API Key 认证成功
+			c.Next()
+			return
+		}
+
+		// 尝试 JWT 认证
+		if jwtManager != nil {
+			authHeader := c.GetHeader("Authorization")
+			if authHeader != "" {
+				parts := strings.Split(authHeader, " ")
+				if len(parts) == 2 && parts[0] == "Bearer" {
+					claims, err := jwtManager.ValidateToken(parts[1])
+					if err == nil {
+						// JWT 认证成功，将用户信息存储到上下文
+						c.Set("user_email", claims.Email)
+						c.Set("user_id", claims.UserID)
+						c.Set("is_admin", claims.IsAdmin)
+						c.Next()
+						return
+					}
+				}
+			}
+		}
+
+		// 认证失败
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "未授权",
+		})
+		c.Abort()
+	}
+}
+
+// totpRequiredMiddleware TOTP 验证中间件（用于敏感操作）
+func totpRequiredMiddleware(totpManager *auth.TOTPManager, storage storage.Driver) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 获取用户邮箱
+		userEmail, exists := c.Get("user_email")
+		if !exists {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "未授权",
 			})
@@ -151,7 +198,143 @@ func authMiddleware(apiKey string) gin.HandlerFunc {
 			return
 		}
 
+		email := userEmail.(string)
+		ctx := c.Request.Context()
+
+		// 检查用户是否启用了 TOTP
+		totpEnabled, err := totpManager.IsEnabled(ctx, email)
+		if err != nil {
+			logger.Warn().Err(err).Str("user", email).Msg("检查 TOTP 状态失败")
+			c.Next() // 如果检查失败，继续（不强制 TOTP）
+			return
+		}
+
+		if !totpEnabled {
+			// 未启用 TOTP，直接通过
+			c.Next()
+			return
+		}
+
+		// 已启用 TOTP，需要验证 TOTP 代码
+		totpCode := c.GetHeader("X-TOTP-Code")
+		if totpCode == "" {
+			totpCode = c.Query("totp_code")
+		}
+
+		if totpCode == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "需要 TOTP 代码",
+				"requires_2fa": true,
+			})
+			c.Abort()
+			return
+		}
+
+		// 验证 TOTP 代码
+		valid, err := totpManager.Verify(ctx, email, totpCode)
+		if err != nil {
+			logger.Warn().Err(err).Str("user", email).Msg("TOTP 验证失败")
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "TOTP 验证失败",
+			})
+			c.Abort()
+			return
+		}
+
+		if !valid {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "TOTP 代码错误",
+			})
+			c.Abort()
+			return
+		}
+
+		// TOTP 验证通过
 		c.Next()
+	}
+}
+
+// loginHandler 登录处理器
+func loginHandler(driver storage.Driver, jwtManager *auth.JWTManager, totpManager *auth.TOTPManager) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Email    string `json:"email" binding:"required"`
+			Password string `json:"password" binding:"required"`
+			TOTPCode string `json:"totp_code"`
+		}
+
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		ctx := c.Request.Context()
+		user, err := driver.GetUser(ctx, req.Email)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "认证失败",
+			})
+			return
+		}
+
+		// 验证密码
+		valid, err := crypto.VerifyPassword(req.Password, user.PasswordHash)
+		if err != nil || !valid {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "认证失败",
+			})
+			return
+		}
+
+		// 检查是否启用了 TOTP
+		if totpManager != nil {
+			totpEnabled, err := totpManager.IsEnabled(ctx, req.Email)
+			if err == nil && totpEnabled {
+				// 如果启用了 TOTP，必须提供 TOTP 代码
+				if req.TOTPCode == "" {
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"error": "需要 TOTP 代码",
+						"requires_2fa": true,
+					})
+					return
+				}
+
+				// 验证 TOTP 代码
+				valid, err := totpManager.Verify(ctx, req.Email, req.TOTPCode)
+				if err != nil || !valid {
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"error": "TOTP 代码错误",
+					})
+					return
+				}
+			}
+		}
+
+		// 生成 JWT token
+		if jwtManager == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "JWT 管理器未配置",
+			})
+			return
+		}
+
+		token, err := jwtManager.GenerateToken(user.Email, user.ID, false, 24*time.Hour)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "生成令牌失败",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"token": token,
+			"user": gin.H{
+				"email": user.Email,
+				"quota": user.Quota,
+			},
+		})
 	}
 }
 

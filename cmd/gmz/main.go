@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gomailzero/gmz/internal/api"
+	"github.com/gomailzero/gmz/internal/auth"
 	"github.com/gomailzero/gmz/internal/config"
 	"github.com/gomailzero/gmz/internal/imapd"
 	"github.com/gomailzero/gmz/internal/logger"
@@ -90,7 +91,7 @@ func main() {
 	}
 
 	// 创建认证器
-	auth := smtpd.NewDefaultAuthenticator(storageDriver)
+	smtpAuth := smtpd.NewDefaultAuthenticator(storageDriver)
 
 	// 启动 SMTP 服务器
 	if cfg.SMTP.Enabled {
@@ -102,7 +103,7 @@ func main() {
 			TLS:      tlsConfig,
 			Storage:  storageDriver,
 			Maildir:  maildir,
-			Auth:     auth,
+			Auth:     smtpAuth,
 		})
 
 		go func() {
@@ -131,10 +132,22 @@ func main() {
 
 	// 启动管理 API
 	if cfg.Admin.APIKey != "" {
+		// 创建 JWT 管理器
+		jwtSecret := cfg.Admin.JWTSecret
+		if jwtSecret == "" {
+			jwtSecret = "change-me-in-production" // 默认密钥（生产环境必须更改）
+		}
+		jwtManager := auth.NewJWTManager(jwtSecret, "gomailzero")
+		
+		// 创建 TOTP 管理器
+		totpManager := auth.NewTOTPManager(storageDriver)
+
 		apiServer := api.NewServer(&api.Config{
-			Port:    cfg.Admin.Port,
-			APIKey:  cfg.Admin.APIKey,
-			Storage: storageDriver,
+			Port:       cfg.Admin.Port,
+			APIKey:     cfg.Admin.APIKey,
+			Storage:    storageDriver,
+			JWTManager: jwtManager,
+			TOTPManager: totpManager,
 		})
 
 		go func() {
