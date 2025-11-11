@@ -7,13 +7,13 @@
 - ✅ **单二进制部署** - 一个 `gmz` 二进制 + 一个配置文件，60 秒内拉起
 - ✅ **SMTP/IMAP 支持** - 完整的 SMTP 和 IMAP 协议实现
 - ✅ **TLS 加密** - 强制 TLS 1.3，支持 STARTTLS 和 SMTPS
-- ✅ **自动证书管理** - 内置 ACME 客户端，自动申请/续期 Let's Encrypt 证书（开发中）
+- ✅ **自动证书管理** - 内置 ACME 客户端，自动申请/续期 Let's Encrypt 证书
 - ✅ **存储加密** - 邮件体使用 XChaCha20-Poly1305 加密，密钥从用户密码派生
-- ✅ **反垃圾邮件** - SPF/DKIM/DMARC 检查，灰名单，速率限制（开发中）
-- ✅ **双因子认证** - 支持 TOTP 和 WebAuthn（开发中）
-- ✅ **WebMail** - 现代化的 Web 邮件界面（开发中）
-- ✅ **管理 API** - RESTful API，支持 OpenAPI 3.1（开发中）
-- ✅ **监控指标** - Prometheus 指标导出，Grafana 仪表板（开发中）
+- ✅ **反垃圾邮件** - SPF/DKIM/DMARC 检查，灰名单，速率限制
+- ✅ **双因子认证** - 支持 TOTP 和 WebAuthn（基础实现）
+- ✅ **WebMail** - 现代化的 Web 邮件界面（Vue3 + Vite）
+- ✅ **管理 API** - RESTful API，支持 JWT 和 API Key 认证
+- ✅ **监控指标** - Prometheus 指标导出
 
 ## 快速开始
 
@@ -109,7 +109,8 @@ systemctl start gmz
 主要配置项：
 
 - `domain`: 主域名
-- `tls.acme.enabled`: 启用自动证书管理（开发中）
+- `tls.acme.enabled`: 启用自动证书管理
+- `admin.jwt_secret`: JWT 密钥（用于 WebMail 和管理 API 认证）
 - `storage.driver`: 存储驱动（sqlite 或 postgres）
 - `smtp.ports`: SMTP 监听端口（25, 465, 587）
 - `imap.port`: IMAP 监听端口（993）
