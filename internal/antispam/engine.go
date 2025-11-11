@@ -36,7 +36,7 @@ func NewEngine(spf *SPF, dkim *DKIM, dmarc *DMARC, greylist *Greylist, ratelimit
 
 	// 构建规则链
 	if ratelimit != nil {
-		engine.chain.AddRule(NewRateLimitRule(ratelimit, 100, 60))
+		engine.chain.AddRule(NewRateLimitRule(ratelimit, 100, 1*time.Minute))
 	}
 	if greylist != nil {
 		engine.chain.AddRule(NewGreylistRule(greylist))

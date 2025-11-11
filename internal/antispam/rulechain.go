@@ -3,6 +3,7 @@ package antispam
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 // RuleChain 规则链
@@ -132,11 +133,11 @@ func (r *RuleChain) Execute(ctx context.Context, req *CheckRequest) (*CheckResul
 type RateLimitRule struct {
 	limiter *RateLimiter
 	limit   int
-	window  int // 秒
+	window  time.Duration
 }
 
 // NewRateLimitRule 创建速率限制规则
-func NewRateLimitRule(limiter *RateLimiter, limit int, window int) *RateLimitRule {
+func NewRateLimitRule(limiter *RateLimiter, limit int, window time.Duration) *RateLimitRule {
 	return &RateLimitRule{
 		limiter: limiter,
 		limit:   limit,
