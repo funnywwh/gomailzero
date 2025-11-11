@@ -63,14 +63,53 @@ const handleSend = async () => {
   }
 }
 
-const handleSave = () => {
-  // TODO: 实现保存草稿功能
-  alert('保存草稿功能待实现')
+const handleSave = async () => {
+  if (!form.value.to && !form.value.subject && !form.value.body) {
+    alert('草稿内容不能为空')
+    return
+  }
+
+  try {
+    const toList = form.value.to ? form.value.to.split(',').map((email) => email.trim()) : []
+    await api.saveDraft({
+      to: toList,
+      subject: form.value.subject,
+      body: form.value.body
+    })
+    alert('草稿已保存')
+  } catch (err: any) {
+    error.value = err.response?.data?.error || '保存草稿失败'
+  }
 }
 
 const goBack = () => {
   router.push('/mails')
 }
+
+onMounted(() => {
+  // 处理回复和转发
+  const replyId = route.query.reply as string
+  const forwardId = route.query.forward as string
+
+  if (replyId) {
+    // 加载原邮件并设置回复内容
+    api.getMail(replyId).then((mail) => {
+      form.value.to = mail.from
+      form.value.subject = (route.query.subject as string) || `Re: ${mail.subject || ''}`
+      form.value.body = `\n\n--- 原始邮件 ---\n发件人: ${mail.from}\n日期: ${new Date(mail.received_at).toLocaleString()}\n主题: ${mail.subject || ''}\n\n${mail.body ? new TextDecoder().decode(mail.body) : ''}`
+    }).catch((err) => {
+      console.error('加载邮件失败:', err)
+    })
+  } else if (forwardId) {
+    // 加载原邮件并设置转发内容
+    api.getMail(forwardId).then((mail) => {
+      form.value.subject = (route.query.subject as string) || `Fwd: ${mail.subject || ''}`
+      form.value.body = `\n\n--- 转发邮件 ---\n发件人: ${mail.from}\n日期: ${new Date(mail.received_at).toLocaleString()}\n主题: ${mail.subject || ''}\n收件人: ${mail.to?.join(', ') || ''}\n\n${mail.body ? new TextDecoder().decode(mail.body) : ''}`
+    }).catch((err) => {
+      console.error('加载邮件失败:', err)
+    })
+  }
+})
 </script>
 
 <style scoped>

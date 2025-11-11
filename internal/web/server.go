@@ -59,10 +59,13 @@ func NewServer(cfg *Config) *Server {
 		api.Use(jwtMiddleware(jwtManager))
 		{
 			api.GET("/mails", listMailsHandler(cfg.Storage))
+			api.GET("/mails/search", searchMailsHandler(cfg.Storage))
 			api.GET("/mails/:id", getMailHandler(cfg.Storage))
 			api.POST("/mails", sendMailHandler(cfg.Storage))
+			api.POST("/mails/drafts", saveDraftHandler(cfg.Storage))
 			api.DELETE("/mails/:id", deleteMailHandler(cfg.Storage))
 			api.PUT("/mails/:id/flags", updateMailFlagsHandler(cfg.Storage))
+			api.GET("/folders", listFoldersHandler(cfg.Storage))
 		}
 	}
 

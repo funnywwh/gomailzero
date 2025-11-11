@@ -33,6 +33,8 @@ type Driver interface {
 	ListMails(ctx context.Context, userEmail string, folder string, limit, offset int) ([]*Mail, error)
 	DeleteMail(ctx context.Context, id string) error
 	UpdateMailFlags(ctx context.Context, id string, flags []string) error
+	SearchMails(ctx context.Context, userEmail string, query string, folder string, limit, offset int) ([]*Mail, error)
+	ListFolders(ctx context.Context, userEmail string) ([]string, error)
 
 	// 配额管理
 	GetQuota(ctx context.Context, userEmail string) (*Quota, error)

@@ -1,8 +1,13 @@
 <template>
   <div class="mail-view-container">
-    <header class="header">
+      <header class="header">
       <button @click="goBack" class="back-btn">← 返回</button>
-      <button @click="handleDelete" class="delete-btn">删除</button>
+      <div class="header-actions">
+        <button @click="handleMarkRead" class="mark-btn">标记为已读</button>
+        <button @click="handleReply" class="reply-btn">回复</button>
+        <button @click="handleForward" class="forward-btn">转发</button>
+        <button @click="handleDelete" class="delete-btn">删除</button>
+      </div>
     </header>
     <div v-if="loading" class="loading">加载中...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
@@ -40,11 +45,54 @@ const loadMail = async () => {
   try {
     const id = route.params.id as string
     mail.value = await api.getMail(id)
+    // 自动标记为已读
+    if (mail.value && !mail.value.flags?.includes('\\Seen')) {
+      await api.updateMailFlags(id, [...(mail.value.flags || []), '\\Seen'])
+    }
   } catch (err: any) {
     error.value = err.response?.data?.error || '加载邮件失败'
   } finally {
     loading.value = false
   }
+}
+
+const handleMarkRead = async () => {
+  if (!mail.value) return
+
+  try {
+    const id = route.params.id as string
+    const flags = mail.value.flags || []
+    if (flags.includes('\\Seen')) {
+      await api.updateMailFlags(id, flags.filter((f) => f !== '\\Seen'))
+    } else {
+      await api.updateMailFlags(id, [...flags, '\\Seen'])
+    }
+    await loadMail()
+  } catch (err: any) {
+    error.value = err.response?.data?.error || '更新标记失败'
+  }
+}
+
+const handleReply = () => {
+  if (!mail.value) return
+  router.push({
+    path: '/compose',
+    query: {
+      reply: mail.value.id,
+      subject: mail.value.subject?.startsWith('Re:') ? mail.value.subject : `Re: ${mail.value.subject || ''}`
+    }
+  })
+}
+
+const handleForward = () => {
+  if (!mail.value) return
+  router.push({
+    path: '/compose',
+    query: {
+      forward: mail.value.id,
+      subject: mail.value.subject?.startsWith('Fwd:') ? mail.value.subject : `Fwd: ${mail.value.subject || ''}`
+    }
+  })
 }
 
 const goBack = () => {
@@ -85,18 +133,38 @@ onMounted(() => {
 .header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 1rem 2rem;
   background: #fff;
   border-bottom: 1px solid #e0e0e0;
 }
 
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .back-btn,
+.mark-btn,
+.reply-btn,
+.forward-btn,
 .delete-btn {
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.875rem;
+}
+
+.mark-btn {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.reply-btn,
+.forward-btn {
+  background: #667eea;
+  color: white;
 }
 
 .back-btn {

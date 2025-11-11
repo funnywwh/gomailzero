@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gomailzero/gmz/internal/migrate"
@@ -586,6 +587,100 @@ func (d *SQLiteDriver) ListMails(ctx context.Context, userEmail string, folder s
 	}
 
 	return mails, nil
+}
+
+// SearchMails 搜索邮件
+func (d *SQLiteDriver) SearchMails(ctx context.Context, userEmail string, query string, folder string, limit, offset int) ([]*Mail, error) {
+	sqlQuery := `
+		SELECT id, user_email, folder, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, size, flags, received_at, created_at
+		FROM mails
+		WHERE user_email = ? AND (subject LIKE ? OR from_addr LIKE ? OR to_addrs LIKE ?)
+	`
+	args := []interface{}{userEmail, "%" + query + "%", "%" + query + "%", "%" + query + "%"}
+
+	if folder != "" {
+		sqlQuery += " AND folder = ?"
+		args = append(args, folder)
+	}
+
+	sqlQuery += " ORDER BY received_at DESC LIMIT ? OFFSET ?"
+	args = append(args, limit, offset)
+
+	rows, err := d.db.QueryContext(ctx, sqlQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("搜索邮件失败: %w", err)
+	}
+	defer rows.Close()
+
+	var mails []*Mail
+	for rows.Next() {
+		var mail Mail
+		var toAddrs, flags string
+		if err := rows.Scan(
+			&mail.ID,
+			&mail.UserEmail,
+			&mail.Folder,
+			&mail.From,
+			&toAddrs,
+			&mail.Cc,
+			&mail.Bcc,
+			&mail.Subject,
+			&mail.Size,
+			&flags,
+			&mail.ReceivedAt,
+			&mail.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("扫描邮件失败: %w", err)
+		}
+
+		if toAddrs != "" {
+			mail.To = strings.Split(toAddrs, ",")
+		}
+		if flags != "" {
+			mail.Flags = strings.Split(flags, ",")
+		}
+
+		mails = append(mails, &mail)
+	}
+
+	return mails, nil
+}
+
+// ListFolders 列出文件夹
+func (d *SQLiteDriver) ListFolders(ctx context.Context, userEmail string) ([]string, error) {
+	query := `
+		SELECT DISTINCT folder
+		FROM mails
+		WHERE user_email = ?
+		ORDER BY folder
+	`
+	rows, err := d.db.QueryContext(ctx, query, userEmail)
+	if err != nil {
+		return nil, fmt.Errorf("查询文件夹列表失败: %w", err)
+	}
+	defer rows.Close()
+
+	var folders []string
+	// 添加默认文件夹
+	folders = append(folders, "INBOX", "Sent", "Drafts", "Trash", "Spam")
+
+	folderMap := make(map[string]bool)
+	for _, f := range folders {
+		folderMap[f] = true
+	}
+
+	for rows.Next() {
+		var folder string
+		if err := rows.Scan(&folder); err != nil {
+			return nil, fmt.Errorf("扫描文件夹失败: %w", err)
+		}
+		if !folderMap[folder] {
+			folders = append(folders, folder)
+			folderMap[folder] = true
+		}
+	}
+
+	return folders, nil
 }
 
 // DeleteMail 删除邮件

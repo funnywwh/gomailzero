@@ -2,23 +2,30 @@
   <div class="mail-list-container">
     <header class="header">
       <h1>邮件</h1>
-      <button @click="handleCompose" class="compose-btn">写邮件</button>
-      <button @click="handleLogout" class="logout-btn">退出</button>
+      <div class="header-actions">
+        <input
+          v-model="searchQuery"
+          @keyup.enter="handleSearch"
+          type="text"
+          placeholder="搜索邮件..."
+          class="search-input"
+        />
+        <button @click="handleSearch" class="search-btn">搜索</button>
+        <button @click="handleCompose" class="compose-btn">写邮件</button>
+        <button @click="handleLogout" class="logout-btn">退出</button>
+      </div>
     </header>
     <div class="content">
       <aside class="sidebar">
         <nav>
-          <a href="#" @click.prevent="setFolder('INBOX')" :class="{ active: currentFolder === 'INBOX' }">
-            收件箱
-          </a>
-          <a href="#" @click.prevent="setFolder('Sent')" :class="{ active: currentFolder === 'Sent' }">
-            已发送
-          </a>
-          <a href="#" @click.prevent="setFolder('Drafts')" :class="{ active: currentFolder === 'Drafts' }">
-            草稿
-          </a>
-          <a href="#" @click.prevent="setFolder('Trash')" :class="{ active: currentFolder === 'Trash' }">
-            垃圾箱
+          <a
+            v-for="folder in folders"
+            :key="folder"
+            href="#"
+            @click.prevent="setFolder(folder)"
+            :class="{ active: currentFolder === folder }"
+          >
+            {{ getFolderName(folder) }}
           </a>
         </nav>
       </aside>
@@ -55,6 +62,8 @@ const mails = ref<any[]>([])
 const currentFolder = ref('INBOX')
 const loading = ref(false)
 const error = ref('')
+const searchQuery = ref('')
+const folders = ref<string[]>([])
 
 const loadMails = async () => {
   loading.value = true
@@ -70,8 +79,37 @@ const loadMails = async () => {
   }
 }
 
+const loadFolders = async () => {
+  try {
+    const response = await api.listFolders()
+    folders.value = response.folders || []
+  } catch (err: any) {
+    console.error('加载文件夹失败:', err)
+  }
+}
+
+const handleSearch = async () => {
+  if (!searchQuery.value.trim()) {
+    loadMails()
+    return
+  }
+
+  loading.value = true
+  error.value = ''
+
+  try {
+    const response = await api.searchMails(searchQuery.value, currentFolder.value)
+    mails.value = response.mails || []
+  } catch (err: any) {
+    error.value = err.response?.data?.error || '搜索失败'
+  } finally {
+    loading.value = false
+  }
+}
+
 const setFolder = (folder: string) => {
   currentFolder.value = folder
+  searchQuery.value = ''
   loadMails()
 }
 
@@ -99,7 +137,19 @@ const formatDate = (date: string) => {
   })
 }
 
+const getFolderName = (folder: string) => {
+  const names: Record<string, string> = {
+    INBOX: '收件箱',
+    Sent: '已发送',
+    Drafts: '草稿',
+    Trash: '垃圾箱',
+    Spam: '垃圾邮件'
+  }
+  return names[folder] || folder
+}
+
 onMounted(() => {
+  loadFolders()
   loadMails()
 })
 </script>
@@ -125,6 +175,21 @@ onMounted(() => {
   color: #333;
 }
 
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.search-input {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  width: 200px;
+}
+
+.search-btn,
 .compose-btn,
 .logout-btn {
   padding: 0.5rem 1rem;
@@ -132,6 +197,11 @@ onMounted(() => {
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.875rem;
+}
+
+.search-btn {
+  background: #f5f5f5;
+  color: #666;
 }
 
 .compose-btn {

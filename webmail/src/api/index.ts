@@ -54,6 +54,23 @@ export const api = {
 
   // 更新邮件标志
   updateMailFlags: (id: string, flags: string[]) =>
-    apiClient.put(`/mails/${id}/flags`, { flags })
+    apiClient.put(`/mails/${id}/flags`, { flags }),
+
+  // 搜索邮件
+  searchMails: (query: string, folder?: string, limit?: number, offset?: number) =>
+    apiClient.get('/mails/search', { params: { q: query, folder, limit, offset } }),
+
+  // 列出文件夹
+  listFolders: () => apiClient.get('/folders'),
+
+  // 保存草稿
+  saveDraft: (data: {
+    id?: string
+    to: string[]
+    subject: string
+    body: string
+    cc?: string[]
+    bcc?: string[]
+  }) => apiClient.post('/mails/drafts', data)
 }
 

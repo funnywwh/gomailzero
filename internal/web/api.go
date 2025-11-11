@@ -295,3 +295,137 @@ func deleteMailHandler(driver storage.Driver) gin.HandlerFunc {
 		})
 	}
 }
+
+// searchMailsHandler 搜索邮件
+func searchMailsHandler(driver storage.Driver) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userEmail, exists := c.Get("user_email")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "未授权",
+			})
+			c.Abort()
+			return
+		}
+
+		email := userEmail.(string)
+		query := c.Query("q")
+		folder := c.DefaultQuery("folder", "")
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+		offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+		if query == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "搜索查询不能为空",
+			})
+			return
+		}
+
+		ctx := c.Request.Context()
+		mails, err := driver.SearchMails(ctx, email, query, folder, limit, offset)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"mails": mails,
+		})
+	}
+}
+
+// listFoldersHandler 列出文件夹
+func listFoldersHandler(driver storage.Driver) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userEmail, exists := c.Get("user_email")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "未授权",
+			})
+			c.Abort()
+			return
+		}
+
+		email := userEmail.(string)
+		ctx := c.Request.Context()
+		folders, err := driver.ListFolders(ctx, email)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"folders": folders,
+		})
+	}
+}
+
+// saveDraftHandler 保存草稿
+func saveDraftHandler(driver storage.Driver) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userEmail, exists := c.Get("user_email")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "未授权",
+			})
+			c.Abort()
+			return
+		}
+
+		var req struct {
+			ID      string   `json:"id"` // 如果提供，更新现有草稿
+			To      []string `json:"to"`
+			Cc      []string `json:"cc"`
+			Bcc     []string `json:"bcc"`
+			Subject string   `json:"subject"`
+			Body    string   `json:"body"`
+		}
+
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		from := userEmail.(string)
+		ctx := c.Request.Context()
+
+		mailID := req.ID
+		if mailID == "" {
+			mailID = fmt.Sprintf("draft-%d", time.Now().UnixNano())
+		}
+
+		mail := &storage.Mail{
+			ID:         mailID,
+			UserEmail:  from,
+			Folder:     "Drafts",
+			From:       from,
+			To:         req.To,
+			Cc:         req.Cc,
+			Bcc:        req.Bcc,
+			Subject:    req.Subject,
+			Body:       []byte(req.Body),
+			Size:       int64(len(req.Body)),
+			Flags:      []string{},
+			ReceivedAt: time.Now(),
+			CreatedAt:  time.Now(),
+		}
+
+		if err := driver.StoreMail(ctx, mail); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "保存草稿失败",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message": "草稿已保存",
+			"id":      mailID,
+		})
+	}
+}
