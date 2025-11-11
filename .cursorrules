@@ -1,0 +1,563 @@
+# GoMailZero Cursor 规则
+
+## 项目概述
+
+GoMailZero (gmz) 是一个生产级、安全、可扩展的 Go 邮件服务器，支持 SMTP/IMAP/TLS/DKIM/SPF/DMARC/反垃圾/双因子/WebMail。
+
+## 核心原则
+
+### 1. TDD 驱动开发（Test-Driven Development）
+
+**严格遵循 TDD 流程**：
+
+1. **先写测试**：在实现任何功能之前，必须先编写测试用例
+2. **测试失败**：运行测试，确认测试失败（Red）
+3. **最小实现**：编写最小代码使测试通过（Green）
+4. **重构优化**：在测试通过后重构代码（Refactor）
+5. **循环迭代**：重复上述流程
+
+**规则**：
+- 每个新功能必须从测试开始
+- 禁止在没有测试的情况下编写实现代码
+- 测试覆盖率必须 ≥ 80%
+- 集成测试必须覆盖主要场景
+
+**示例流程**：
+
+```go
+// 1. 先写测试 (internal/smtpd/auth_test.go)
+func TestSMTPAuth(t *testing.T) {
+    // 测试用例
+}
+
+// 2. 运行测试（应该失败）
+// go test ./internal/smtpd
+
+// 3. 实现最小代码 (internal/smtpd/auth.go)
+func Authenticate(username, password string) error {
+    // 最小实现
+}
+
+// 4. 运行测试（应该通过）
+// go test ./internal/smtpd
+
+// 5. 重构优化
+```
+
+### 2. 代码规范
+
+#### 禁止事项
+
+- ❌ **禁止引入 cgo**：使用 `modernc.org/sqlite` 替代 `database/sqlite`
+- ❌ **禁止硬编码**：所有密码/密钥必须通过环境变量或配置文件注入
+- ❌ **禁止全局变量**：使用依赖注入和接口
+- ❌ **禁止 panic**：使用错误返回，panic 仅用于不可恢复的错误
+- ❌ **禁止忽略错误**：必须处理所有错误
+
+#### 必须事项
+
+- ✅ **必须包含 trace_id**：所有日志必须包含 `trace_id` 字段
+- ✅ **必须错误处理**：所有错误必须被适当处理
+- ✅ **必须文档注释**：所有公开函数必须有 GoDoc 注释
+- ✅ **必须接口抽象**：核心功能必须通过接口抽象
+- ✅ **必须上下文传递**：长时间运行的操作必须支持 context.Context
+
+### 3. 项目结构
+
+```
+gomailzero/
+├── cmd/gmz/              # 主入口，仅包含 main.go
+├── internal/             # 内部包，不对外暴露
+│   ├── config/          # 配置管理
+│   ├── smtpd/           # SMTP 服务器
+│   ├── imapd/           # IMAP 服务器
+│   ├── storage/          # 存储层
+│   ├── crypto/           # 加密模块
+│   ├── acme/            # ACME 客户端
+│   ├── antispam/        # 反垃圾模块
+│   ├── web/             # WebMail
+│   ├── api/             # 管理 API
+│   ├── auth/            # 认证模块
+│   ├── metrics/         # Prometheus 指标
+│   ├── logger/          # 结构化日志
+│   └── migrate/         # 数据库迁移
+├── webmail/             # Vue3 前端源码
+├── migrations/          # SQL 迁移文件
+├── test/                # 测试代码
+│   ├── integration/    # 集成测试
+│   └── fixtures/       # 测试数据
+└── scripts/             # 脚本文件
+```
+
+### 4. 命名规范
+
+#### 包名
+
+- 使用小写单词，无下划线
+- 简洁明了，避免缩写（除非广泛使用）
+- 示例：`smtpd`, `imapd`, `storage`, `crypto`
+
+#### 文件名
+
+- 使用小写单词，多个单词用下划线分隔
+- 测试文件：`*_test.go`
+- 示例：`server.go`, `auth_test.go`, `maildir.go`
+
+#### 函数/变量名
+
+- 使用驼峰命名（CamelCase）
+- 公开函数首字母大写，私有函数首字母小写
+- 示例：`StartServer()`, `authenticate()`, `userEmail`
+
+#### 接口名
+
+- 通常以 `-er` 结尾或使用描述性名称
+- 示例：`StorageDriver`, `Authenticator`, `MailHandler`
+
+### 5. 错误处理
+
+#### 错误定义
+
+```go
+// 使用 errors 包定义错误
+var (
+    ErrUserNotFound = errors.New("user not found")
+    ErrInvalidAuth  = errors.New("invalid authentication")
+)
+
+// 或使用 fmt.Errorf 包装错误
+if err != nil {
+    return fmt.Errorf("failed to load config: %w", err)
+}
+```
+
+#### 错误日志
+
+```go
+// 使用结构化日志记录错误
+logger.Error().
+    Err(err).
+    Str("trace_id", traceID).
+    Str("user", username).
+    Msg("authentication failed")
+```
+
+### 6. 日志规范
+
+#### 日志级别
+
+- `Trace`: 详细的调试信息
+- `Debug`: 调试信息
+- `Info`: 一般信息
+- `Warn`: 警告信息
+- `Error`: 错误信息
+- `Fatal`: 致命错误（会导致程序退出）
+
+#### 日志格式
+
+```go
+// 必须包含 trace_id
+logger.Info().
+    Str("trace_id", traceID).
+    Str("action", "smtp_auth").
+    Str("user", username).
+    Msg("user authenticated")
+
+// 错误日志必须包含错误对象
+logger.Error().
+    Err(err).
+    Str("trace_id", traceID).
+    Str("component", "smtpd").
+    Msg("failed to start server")
+```
+
+### 7. 测试规范
+
+#### 单元测试
+
+- 每个包必须有对应的 `*_test.go` 文件
+- 测试函数命名：`TestFunctionName`
+- 使用表驱动测试（Table-Driven Tests）
+
+```go
+func TestValidateEmail(t *testing.T) {
+    tests := []struct {
+        name    string
+        email   string
+        wantErr bool
+    }{
+        {"valid email", "test@example.com", false},
+        {"invalid email", "invalid", true},
+        {"empty email", "", true},
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            err := ValidateEmail(tt.email)
+            if (err != nil) != tt.wantErr {
+                t.Errorf("ValidateEmail() error = %v, wantErr %v", err, tt.wantErr)
+            }
+        })
+    }
+}
+```
+
+#### 集成测试
+
+- 放在 `test/integration/` 目录
+- 使用 `//go:build integration` 标签
+- 必须可以独立运行
+
+```go
+//go:build integration
+
+package integration
+
+func TestSMTPFlow(t *testing.T) {
+    // 集成测试代码
+}
+```
+
+#### 测试覆盖率
+
+- 单测覆盖率必须 ≥ 80%
+- 使用 `go test -cover` 检查
+- CI 中必须验证覆盖率
+
+### 8. 配置管理
+
+#### 配置结构
+
+```go
+// internal/config/config.go
+type Config struct {
+    NodeID  string       `yaml:"node_id"`
+    Domain  string       `yaml:"domain"`
+    TLS     TLSConfig    `yaml:"tls"`
+    Storage StorageConfig `yaml:"storage"`
+    // ...
+}
+```
+
+#### 配置加载
+
+- 使用 viper 加载配置
+- 支持环境变量覆盖
+- 支持配置文件热更新
+
+```go
+// 环境变量覆盖格式：GMZ_STORAGE_DSN
+// 配置文件路径：/etc/gmz/gmz.yml 或 ./gmz.yml
+```
+
+### 9. 接口设计
+
+#### 存储接口
+
+```go
+// internal/storage/driver.go
+type Driver interface {
+    CreateUser(ctx context.Context, user *User) error
+    GetUser(ctx context.Context, email string) (*User, error)
+    StoreMail(ctx context.Context, mail *Mail) error
+    // ...
+}
+```
+
+#### 认证接口
+
+```go
+// internal/auth/authenticator.go
+type Authenticator interface {
+    Authenticate(ctx context.Context, username, password string) (*User, error)
+    AuthenticateTOTP(ctx context.Context, username, password, totpCode string) (*User, error)
+}
+```
+
+### 10. 安全规范
+
+#### 密码处理
+
+- 使用 Argon2id 进行密码哈希
+- 永远不存储明文密码
+- 密码比较使用 constant-time 比较
+
+```go
+// 使用 golang.org/x/crypto/argon2
+hash := argon2.IDKey([]byte(password), salt, 3, 32*1024, 4, 32)
+```
+
+#### 加密存储
+
+- 邮件体使用 XChaCha20-Poly1305 加密
+- 密钥从用户密码派生（Argon2id）
+- 密钥不在磁盘存储
+
+#### TLS 配置
+
+- 强制 TLS 1.3（最低 TLS 1.2）
+- 使用安全的密码套件
+- 证书自动续期（ACME）
+
+### 11. 性能要求
+
+#### 内存限制
+
+- 空载 ≤ 128 MB
+- 10k 连接 ≤ 256 MB
+- 使用连接池和对象池
+
+#### 性能目标
+
+- 单核 1k SMTP msg/s
+- IMAP 登录 < 50 ms
+- 10 万邮件查询 < 200 ms
+
+#### 优化策略
+
+- 使用索引优化数据库查询
+- 使用缓存减少重复计算
+- 使用连接池复用连接
+- 及时释放资源
+
+### 12. 数据库迁移
+
+#### 迁移文件
+
+- 使用 goose 进行数据库迁移
+- 迁移文件放在 `migrations/` 目录
+- 命名格式：`NNNNN_description.up.sql` 和 `NNNNN_description.down.sql`
+
+#### 迁移执行
+
+- 启动时自动执行待执行的迁移
+- 支持手动迁移和回滚
+- 迁移必须可逆（提供 down 文件）
+
+### 13. 文档要求
+
+#### 代码注释
+
+```go
+// Authenticate validates the username and password.
+// It returns an error if authentication fails.
+func Authenticate(ctx context.Context, username, password string) (*User, error) {
+    // ...
+}
+```
+
+#### README
+
+- 必须包含快速开始指南
+- 必须包含配置说明
+- 必须包含部署指南
+- 必须包含故障排查
+
+#### API 文档
+
+- 使用 OpenAPI 3.1 规范
+- 自动生成 API 文档
+- 提供 Postman 集合
+
+### 14. Git 提交规范
+
+#### 提交消息格式
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+#### 类型（type）
+
+- `feat`: 新功能
+- `fix`: Bug 修复
+- `docs`: 文档更新
+- `test`: 测试相关
+- `refactor`: 重构
+- `perf`: 性能优化
+- `chore`: 构建/工具相关
+
+#### 示例
+
+```
+feat(smtpd): add STARTTLS support
+
+Implement STARTTLS command for SMTP server.
+Support TLS 1.3 and fallback to TLS 1.2.
+
+Closes #123
+```
+
+### 15. 开发工作流
+
+#### 功能开发流程
+
+1. **创建分支**: `git checkout -b feat/feature-name`
+2. **编写测试**: 先写测试用例（TDD）
+3. **实现功能**: 编写最小实现使测试通过
+4. **重构优化**: 在测试通过后重构
+5. **运行测试**: `go test ./... -cover`
+6. **提交代码**: 遵循提交规范
+7. **创建 PR**: 包含测试和文档
+
+#### 代码审查
+
+- 所有代码必须经过审查
+- 审查重点：测试覆盖率、错误处理、安全性
+- 至少一人批准才能合并
+
+### 16. CI/CD 要求
+
+#### 必须通过的检查
+
+- 单元测试通过
+- 集成测试通过
+- 测试覆盖率 ≥ 80%
+- 代码格式检查（gofmt, golint）
+- 安全扫描（gosec）
+- 构建成功（多架构）
+
+#### CI 流程
+
+```yaml
+# .github/workflows/ci.yml
+- 运行单元测试
+- 运行集成测试
+- 检查测试覆盖率
+- 代码格式检查
+- 安全扫描
+- 构建多架构二进制
+- 构建 Docker 镜像
+```
+
+### 17. 依赖管理
+
+#### Go 模块
+
+- 使用 Go Modules 管理依赖
+- 定期更新依赖（安全补丁）
+- 避免不必要的依赖
+
+#### 依赖选择原则
+
+- 优先使用标准库
+- 选择活跃维护的项目
+- 避免引入 cgo 依赖
+- 检查依赖的许可证
+
+### 18. 特殊注意事项
+
+#### 邮件协议
+
+- 严格遵循 SMTP/IMAP 协议规范
+- 正确处理各种边界情况
+- 支持标准扩展（STARTTLS, AUTH, IDLE 等）
+
+#### 反垃圾邮件
+
+- 实现 SPF/DKIM/DMARC 检查
+- 实现灰名单机制
+- 实现速率限制
+- 避免 false-positive
+
+#### 证书管理
+
+- 自动申请和续期 Let's Encrypt 证书
+- 支持证书热重载
+- 支持 ECDSA P-256 双证书
+
+### 19. 调试和故障排查
+
+#### 日志级别
+
+- 开发环境：Debug 级别
+- 生产环境：Info 级别
+- 故障排查：临时提升到 Debug
+
+#### 追踪
+
+- 所有请求必须包含 trace_id
+- 支持分布式追踪（可选）
+- 日志关联 trace_id
+
+### 20. 代码生成提示
+
+当使用 Cursor AI 生成代码时，请遵循以下提示：
+
+1. **始终先写测试**：生成功能代码前，先生成测试代码
+2. **使用接口**：核心功能通过接口抽象
+3. **错误处理**：所有错误必须被处理
+4. **日志记录**：关键操作必须记录日志（包含 trace_id）
+5. **文档注释**：所有公开函数必须有注释
+6. **避免硬编码**：使用配置或常量
+7. **性能考虑**：注意内存和 CPU 使用
+8. **安全第一**：密码、密钥、加密相关代码必须安全
+
+---
+
+## 快速参考
+
+### 常用命令
+
+```bash
+# 运行测试
+go test ./... -cover
+
+# 运行集成测试
+go test ./test/integration -tags=integration
+
+# 检查覆盖率
+go test ./... -coverprofile=coverage.out
+go tool cover -html=coverage.out
+
+# 代码格式
+gofmt -w .
+golint ./...
+
+# 安全扫描
+gosec ./...
+
+# 构建
+go build -o gmz ./cmd/gmz
+
+# 运行
+./gmz -c gmz.yml
+```
+
+### 测试模板
+
+```go
+func TestFunctionName(t *testing.T) {
+    tests := []struct {
+        name    string
+        input   string
+        want    string
+        wantErr bool
+    }{
+        // 测试用例
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            got, err := FunctionName(tt.input)
+            if (err != nil) != tt.wantErr {
+                t.Errorf("FunctionName() error = %v, wantErr %v", err, tt.wantErr)
+                return
+            }
+            if got != tt.want {
+                t.Errorf("FunctionName() = %v, want %v", got, tt.want)
+            }
+        })
+    }
+}
+```
+
+---
+
+**最后更新**: 2024-12-19  
+**版本**: v0.1.0 (Cursor 规则)
+
