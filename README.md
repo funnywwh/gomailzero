@@ -176,7 +176,8 @@ sudo ./scripts/upgrade.sh v0.9.1 ./bin/gmz
 - TOTP 双因子认证基础实现
 - JWT 认证系统
 - 管理 API 基础功能（域名、用户、别名、配额管理）
-- WebMail 后端基础实现（登录、邮件列表、发送、删除）
+- WebMail 后端完整实现（登录、邮件列表、发送、删除、搜索、文件夹、草稿）
+- WebMail 前端完整功能（邮件列表、查看、编写、搜索、文件夹导航、回复、转发、标记）
 - Prometheus 指标导出
 - CI/CD 配置（测试、构建、安全扫描）
 - 安全扫描和修复（gosec、golangci-lint）
@@ -185,11 +186,12 @@ sudo ./scripts/upgrade.sh v0.9.1 ./bin/gmz
 
 - ACME 证书自动续期和热重载优化
 - DKIM/SPF/DMARC 完整验证流程优化
-- WebMail 前端完整功能（文件夹管理、搜索、PGP 支持）
+- WebMail PGP 加密/签名支持
 - WebAuthn 密钥存储实现
 - 集成测试完善（更多场景）
 - OpenAPI 文档自动生成
 - 性能测试和优化
+- 邮件附件支持
 
 ## 开发
 
