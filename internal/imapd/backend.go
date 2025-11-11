@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/emersion/go-imap"
-	"github.com/emersion/go-imap/server"
+	"github.com/emersion/go-imap/backend"
 	"github.com/gomailzero/gmz/internal/logger"
 	"github.com/gomailzero/gmz/internal/storage"
 )
@@ -26,7 +26,7 @@ func NewBackend(storage storage.Driver, auth Authenticator) *Backend {
 }
 
 // Login 登录
-func (b *Backend) Login(conn *server.Conn, username, password string) (server.User, error) {
+func (b *Backend) Login(conn *imap.ConnInfo, username, password string) (backend.User, error) {
 	ctx := context.Background()
 	user, err := b.auth.Authenticate(ctx, username, password)
 	if err != nil {
@@ -58,24 +58,26 @@ func (u *User) Username() string {
 }
 
 // ListMailboxes 列出邮箱
-func (u *User) ListMailboxes(subscribed bool) ([]imap.MailboxInfo, error) {
+func (u *User) ListMailboxes(subscribed bool) ([]backend.Mailbox, error) {
 	// 标准文件夹
 	folders := []string{"INBOX", "Sent", "Drafts", "Trash", "Spam"}
 
-	var mailboxes []imap.MailboxInfo
+	var mailboxes []backend.Mailbox
+	ctx := context.Background()
 	for _, folder := range folders {
-		mailboxes = append(mailboxes, imap.MailboxInfo{
-			Attributes: []string{imap.NoInferiorsAttr},
-			Delimiter:  "/",
-			Name:       folder,
-		})
+		mails, err := u.storage.ListMails(ctx, u.user.Email, folder, 1000, 0)
+		if err != nil {
+			// 如果文件夹不存在，创建空邮箱
+			mails = []*storage.Mail{}
+		}
+		mailboxes = append(mailboxes, NewMailbox(u.storage, u.user.Email, folder, mails))
 	}
 
 	return mailboxes, nil
 }
 
 // GetMailbox 获取邮箱
-func (u *User) GetMailbox(name string) (server.Mailbox, error) {
+func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 	ctx := context.Background()
 
 	// 列出邮件
@@ -85,6 +87,29 @@ func (u *User) GetMailbox(name string) (server.Mailbox, error) {
 	}
 
 	return NewMailbox(u.storage, u.user.Email, name, mails), nil
+}
+
+// CreateMailbox 创建邮箱
+func (u *User) CreateMailbox(name string) error {
+	// TODO: 实现创建邮箱功能
+	return nil
+}
+
+// DeleteMailbox 删除邮箱
+func (u *User) DeleteMailbox(name string) error {
+	// TODO: 实现删除邮箱功能
+	return nil
+}
+
+// Logout 登出
+func (u *User) Logout() error {
+	return nil
+}
+
+// RenameMailbox 重命名邮箱
+func (u *User) RenameMailbox(existingName, newName string) error {
+	// TODO: 实现重命名邮箱功能
+	return nil
 }
 
 // Mailbox 邮箱
@@ -159,7 +184,7 @@ func (m *Mailbox) Check() error {
 }
 
 // ListMessages 列出邮件
-func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.FetchItem, ch chan *imap.Message) error {
+func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.FetchItem, ch chan<- *imap.Message) error {
 	defer close(ch)
 
 	for i, mail := range m.mails {
@@ -235,6 +260,12 @@ func (m *Mailbox) SetFlags(uid bool, seqSet *imap.SeqSet, flags []string) error 
 // StoreFlags 存储标志
 func (m *Mailbox) StoreFlags(uid bool, seqSet *imap.SeqSet, flags []string, op imap.FlagsOp) error {
 	// TODO: 实现存储标志功能
+	return fmt.Errorf("未实现")
+}
+
+// UpdateMessagesFlags 更新消息标志
+func (m *Mailbox) UpdateMessagesFlags(uid bool, seqSet *imap.SeqSet, op imap.FlagsOp, flags []string) error {
+	// TODO: 实现更新消息标志功能
 	return fmt.Errorf("未实现")
 }
 

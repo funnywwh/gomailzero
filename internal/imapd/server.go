@@ -29,9 +29,9 @@ type Config struct {
 
 // NewServer 创建 IMAP 服务器
 func NewServer(cfg *Config) *Server {
-	backend := NewBackend(cfg.Storage, cfg.Auth)
+	bkd := NewBackend(cfg.Storage, cfg.Auth)
 
-	s := server.New(backend)
+	s := server.New(bkd)
 	s.Addr = fmt.Sprintf(":%d", cfg.Port)
 	s.AllowInsecureAuth = false // 强制 TLS
 
@@ -41,7 +41,7 @@ func NewServer(cfg *Config) *Server {
 
 	return &Server{
 		config:  cfg,
-		backend: backend,
+		backend: bkd,
 		server:  s,
 	}
 }

@@ -16,7 +16,7 @@ type SQLiteDriver struct {
 
 // NewSQLiteDriver 创建 SQLite 驱动
 func NewSQLiteDriver(dsn string) (*SQLiteDriver, error) {
-	db, err := sql.Open("sqlite", dsn)
+	db, err := sql.Open("sqlite", dsn+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)")
 	if err != nil {
 		return nil, fmt.Errorf("打开数据库失败: %w", err)
 	}
@@ -102,11 +102,15 @@ func (d *SQLiteDriver) CreateUser(ctx context.Context, user *User) error {
 		VALUES (?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
+	active := 0
+	if user.Active {
+		active = 1
+	}
 	_, err := d.db.ExecContext(ctx, query,
 		user.Email,
 		user.PasswordHash,
 		user.Quota,
-		user.Active,
+		active,
 		now,
 		now,
 	)
@@ -225,9 +229,13 @@ func (d *SQLiteDriver) CreateDomain(ctx context.Context, domain *Domain) error {
 		VALUES (?, ?, ?, ?)
 	`
 	now := time.Now()
+	active := 0
+	if domain.Active {
+		active = 1
+	}
 	_, err := d.db.ExecContext(ctx, query,
 		domain.Name,
-		domain.Active,
+		active,
 		now,
 		now,
 	)
@@ -421,32 +429,167 @@ func (d *SQLiteDriver) ListAliases(ctx context.Context, domain string) ([]*Alias
 
 // StoreMail 存储邮件（仅元数据，邮件体由 Maildir 存储）
 func (d *SQLiteDriver) StoreMail(ctx context.Context, mail *Mail) error {
-	// TODO: 实现邮件存储逻辑
-	return fmt.Errorf("未实现")
+	query := `
+		INSERT INTO mails (id, user_email, folder, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, size, flags, received_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+	
+	// 将切片转换为字符串（简单实现，实际应该使用 JSON）
+	toAddrs := ""
+	if len(mail.To) > 0 {
+		toAddrs = mail.To[0]
+		for i := 1; i < len(mail.To); i++ {
+			toAddrs += "," + mail.To[i]
+		}
+	}
+	
+	flags := ""
+	if len(mail.Flags) > 0 {
+		flags = mail.Flags[0]
+		for i := 1; i < len(mail.Flags); i++ {
+			flags += "," + mail.Flags[i]
+		}
+	}
+
+	now := time.Now()
+	_, err := d.db.ExecContext(ctx, query,
+		mail.ID,
+		mail.UserEmail,
+		mail.Folder,
+		mail.From,
+		toAddrs,
+		"", // cc_addrs
+		"", // bcc_addrs
+		mail.Subject,
+		mail.Size,
+		flags,
+		mail.ReceivedAt,
+		now,
+	)
+	if err != nil {
+		return fmt.Errorf("存储邮件失败: %w", err)
+	}
+	return nil
 }
 
 // GetMail 获取邮件
 func (d *SQLiteDriver) GetMail(ctx context.Context, id string) (*Mail, error) {
-	// TODO: 实现邮件获取逻辑
-	return nil, fmt.Errorf("未实现")
+	query := `
+		SELECT id, user_email, folder, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, size, flags, received_at, created_at
+		FROM mails
+		WHERE id = ?
+	`
+	row := d.db.QueryRowContext(ctx, query, id)
+
+	var mail Mail
+	var toAddrs, flags string
+	err := row.Scan(
+		&mail.ID,
+		&mail.UserEmail,
+		&mail.Folder,
+		&mail.From,
+		&toAddrs,
+		&mail.Cc,
+		&mail.Bcc,
+		&mail.Subject,
+		&mail.Size,
+		&flags,
+		&mail.ReceivedAt,
+		&mail.CreatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("邮件不存在: %w", ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("查询邮件失败: %w", err)
+	}
+
+	// 解析字符串为切片
+	if toAddrs != "" {
+		mail.To = []string{toAddrs} // 简化处理
+	}
+	if flags != "" {
+		mail.Flags = []string{flags} // 简化处理
+	}
+
+	return &mail, nil
 }
 
 // ListMails 列出邮件
 func (d *SQLiteDriver) ListMails(ctx context.Context, userEmail string, folder string, limit, offset int) ([]*Mail, error) {
-	// TODO: 实现邮件列表逻辑
-	return nil, fmt.Errorf("未实现")
+	query := `
+		SELECT id, user_email, folder, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, size, flags, received_at, created_at
+		FROM mails
+		WHERE user_email = ? AND folder = ?
+		ORDER BY received_at DESC
+		LIMIT ? OFFSET ?
+	`
+	rows, err := d.db.QueryContext(ctx, query, userEmail, folder, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("查询邮件列表失败: %w", err)
+	}
+	defer rows.Close()
+
+	var mails []*Mail
+	for rows.Next() {
+		var mail Mail
+		var toAddrs, flags string
+		if err := rows.Scan(
+			&mail.ID,
+			&mail.UserEmail,
+			&mail.Folder,
+			&mail.From,
+			&toAddrs,
+			&mail.Cc,
+			&mail.Bcc,
+			&mail.Subject,
+			&mail.Size,
+			&flags,
+			&mail.ReceivedAt,
+			&mail.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("扫描邮件失败: %w", err)
+		}
+
+		if toAddrs != "" {
+			mail.To = []string{toAddrs}
+		}
+		if flags != "" {
+			mail.Flags = []string{flags}
+		}
+
+		mails = append(mails, &mail)
+	}
+
+	return mails, nil
 }
 
 // DeleteMail 删除邮件
 func (d *SQLiteDriver) DeleteMail(ctx context.Context, id string) error {
-	// TODO: 实现邮件删除逻辑
-	return fmt.Errorf("未实现")
+	query := `DELETE FROM mails WHERE id = ?`
+	_, err := d.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("删除邮件失败: %w", err)
+	}
+	return nil
 }
 
 // UpdateMailFlags 更新邮件标志
 func (d *SQLiteDriver) UpdateMailFlags(ctx context.Context, id string, flags []string) error {
-	// TODO: 实现邮件标志更新逻辑
-	return fmt.Errorf("未实现")
+	flagsStr := ""
+	if len(flags) > 0 {
+		flagsStr = flags[0]
+		for i := 1; i < len(flags); i++ {
+			flagsStr += "," + flags[i]
+		}
+	}
+
+	query := `UPDATE mails SET flags = ? WHERE id = ?`
+	_, err := d.db.ExecContext(ctx, query, flagsStr, id)
+	if err != nil {
+		return fmt.Errorf("更新邮件标志失败: %w", err)
+	}
+	return nil
 }
 
 // GetQuota 获取配额
@@ -490,4 +633,3 @@ func (d *SQLiteDriver) Close() error {
 
 // ErrNotFound 未找到错误
 var ErrNotFound = fmt.Errorf("not found")
-

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/emersion/go-message"
 	"github.com/emersion/go-smtp"
@@ -15,13 +16,15 @@ import (
 // Backend SMTP 后端
 type Backend struct {
 	storage storage.Driver
+	maildir *storage.Maildir
 	auth    Authenticator
 }
 
 // NewBackend 创建后端
-func NewBackend(storage storage.Driver, auth Authenticator) *Backend {
+func NewBackend(storage storage.Driver, maildir *storage.Maildir, auth Authenticator) *Backend {
 	return &Backend{
 		storage: storage,
+		maildir: maildir,
 		auth:    auth,
 	}
 }
@@ -114,7 +117,7 @@ func (s *Session) Data(r io.Reader) error {
 	ctx := context.Background()
 	for _, recipient := range s.recipients {
 		// 获取用户
-		_, err := s.backend.storage.GetUser(ctx, recipient)
+		user, err := s.backend.storage.GetUser(ctx, recipient)
 		if err != nil {
 			// 检查别名
 			alias, err := s.backend.storage.GetAlias(ctx, recipient)
@@ -122,19 +125,50 @@ func (s *Session) Data(r io.Reader) error {
 				logger.Warn().Str("recipient", recipient).Msg("收件人不存在")
 				continue
 			}
-			_, err = s.backend.storage.GetUser(ctx, alias.To)
+			user, err = s.backend.storage.GetUser(ctx, alias.To)
 			if err != nil {
 				logger.Warn().Str("recipient", recipient).Msg("别名目标用户不存在")
 				continue
 			}
 		}
 
-		// TODO: 存储邮件到 Maildir
-		// TODO: 更新数据库元数据
+		// 确保用户 Maildir 目录存在
+		if err := s.backend.maildir.EnsureUserMaildir(user.Email); err != nil {
+			logger.Error().Err(err).Str("user", user.Email).Msg("创建用户 Maildir 失败")
+			continue
+		}
+
+		// 存储邮件到 Maildir
+		filename, err := s.backend.maildir.StoreMail(user.Email, "INBOX", body)
+		if err != nil {
+			logger.Error().Err(err).Str("user", user.Email).Msg("存储邮件到 Maildir 失败")
+			continue
+		}
+
+		// 存储邮件元数据到数据库
+		mail := &storage.Mail{
+			ID:         filename,
+			UserEmail:  user.Email,
+			Folder:     "INBOX",
+			From:       s.from,
+			To:         []string{recipient},
+			Subject:    subject,
+			Size:       int64(len(body)),
+			Flags:      []string{},
+			ReceivedAt: time.Now(),
+		}
+
+		if err := s.backend.storage.StoreMail(ctx, mail); err != nil {
+			logger.Error().Err(err).Str("user", user.Email).Msg("存储邮件元数据失败")
+			// 继续处理其他收件人
+			continue
+		}
+
 		logger.Info().
 			Str("recipient", recipient).
+			Str("filename", filename).
 			Int("size", len(body)).
-			Msg("存储邮件")
+			Msg("邮件存储成功")
 	}
 
 	return nil
@@ -150,4 +184,3 @@ func (s *Session) Reset() {
 func (s *Session) Logout() error {
 	return nil
 }
-

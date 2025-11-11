@@ -28,12 +28,13 @@ type Config struct {
 	MaxSize  int64
 	TLS      *tls.Config
 	Storage  storage.Driver
+	Maildir  *storage.Maildir
 	Auth     Authenticator
 }
 
 // NewServer 创建 SMTP 服务器
 func NewServer(cfg *Config) *Server {
-	backend := NewBackend(cfg.Storage, cfg.Auth)
+	backend := NewBackend(cfg.Storage, cfg.Maildir, cfg.Auth)
 
 	s := smtp.NewServer(backend)
 	s.Addr = fmt.Sprintf(":%d", cfg.Ports[0])
