@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -249,6 +250,22 @@ func (m *MockStorage) GetQuota(ctx context.Context, userEmail string) (*storage.
 
 func (m *MockStorage) UpdateQuota(ctx context.Context, userEmail string, quota *storage.Quota) error {
 	return nil
+}
+
+func (m *MockStorage) SaveTOTPSecret(ctx context.Context, userEmail string, secret string) error {
+	return nil
+}
+
+func (m *MockStorage) GetTOTPSecret(ctx context.Context, userEmail string) (string, error) {
+	return "", fmt.Errorf("未实现")
+}
+
+func (m *MockStorage) DeleteTOTPSecret(ctx context.Context, userEmail string) error {
+	return nil
+}
+
+func (m *MockStorage) IsTOTPEnabled(ctx context.Context, userEmail string) (bool, error) {
+	return false, nil
 }
 
 func (m *MockStorage) Close() error {
