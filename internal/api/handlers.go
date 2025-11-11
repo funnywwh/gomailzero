@@ -420,4 +420,3 @@ func updateQuotaHandler(driver storage.Driver) gin.HandlerFunc {
 		c.JSON(http.StatusOK, quota)
 	}
 }
-
