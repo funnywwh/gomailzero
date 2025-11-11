@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gomailzero/gmz/internal/auth"
 	"github.com/gomailzero/gmz/internal/logger"
 	"github.com/gomailzero/gmz/internal/storage"
 )
@@ -17,17 +18,20 @@ var staticFiles embed.FS
 
 // Server WebMail 服务器
 type Server struct {
-	config  *Config
-	storage storage.Driver
-	router  *gin.Engine
-	server  *http.Server
+	config     *Config
+	storage    storage.Driver
+	jwtManager *auth.JWTManager
+	router     *gin.Engine
+	server     *http.Server
 }
 
 // Config WebMail 配置
 type Config struct {
-	Path    string
-	Port    int
-	Storage storage.Driver
+	Path      string
+	Port      int
+	Storage   storage.Driver
+	JWTSecret string
+	JWTIssuer string
 }
 
 // NewServer 创建 WebMail 服务器
@@ -41,14 +45,32 @@ func NewServer(cfg *Config) *Server {
 	// 静态文件服务
 	router.StaticFS("/static", http.FS(staticFiles))
 
+	// 创建 JWT 管理器
+	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTIssuer)
+
 	// API 路由
 	api := router.Group("/api")
 	{
-		api.POST("/login", loginHandler(cfg.Storage))
-		api.GET("/mails", listMailsHandler(cfg.Storage))
-		api.GET("/mails/:id", getMailHandler(cfg.Storage))
-		api.POST("/mails", sendMailHandler(cfg.Storage))
-		api.DELETE("/mails/:id", deleteMailHandler(cfg.Storage))
+		// 公开端点（不需要认证）
+		api.POST("/login", loginHandler(cfg.Storage, jwtManager))
+		
+		// 需要认证的端点
+		api.Use(jwtMiddleware(jwtManager))
+		{
+			api.GET("/mails", listMailsHandler(cfg.Storage))
+			api.GET("/mails/:id", getMailHandler(cfg.Storage))
+			api.POST("/mails", sendMailHandler(cfg.Storage))
+			api.DELETE("/mails/:id", deleteMailHandler(cfg.Storage))
+			api.PUT("/mails/:id/flags", updateMailFlagsHandler(cfg.Storage))
+		}
+	}
+
+	return &Server{
+		config:     cfg,
+		storage:    cfg.Storage,
+		jwtManager: jwtManager,
+		router:     router,
+	}
 	}
 
 	// SPA 路由（所有其他路由返回 index.html）
@@ -58,9 +80,10 @@ func NewServer(cfg *Config) *Server {
 	})
 
 	return &Server{
-		config:  cfg,
-		storage: cfg.Storage,
-		router:  router,
+		config:     cfg,
+		storage:    cfg.Storage,
+		jwtManager: auth.NewJWTManager(cfg.JWTSecret, cfg.JWTIssuer),
+		router:     router,
 	}
 }
 
