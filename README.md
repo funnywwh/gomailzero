@@ -182,14 +182,13 @@ sudo ./scripts/upgrade.sh v0.9.1 ./bin/gmz
 
 ### 开发中 🚧
 
-- ACME 证书自动续期和热重载
-- DKIM/SPF/DMARC 完整验证流程
-- ClamAV 病毒扫描集成
-- WebMail 前端（Vue3）
-- WebAuthn 支持
-- 数据库迁移系统
-- 集成测试完善
-- OpenAPI 文档生成
+- ACME 证书自动续期和热重载优化
+- DKIM/SPF/DMARC 完整验证流程优化
+- WebMail 前端完整功能（文件夹管理、搜索、PGP 支持）
+- WebAuthn 密钥存储实现
+- 集成测试完善（更多场景）
+- OpenAPI 文档自动生成
+- 性能测试和优化
 
 ## 开发
 
