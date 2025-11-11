@@ -13,6 +13,11 @@ func TestSQLiteDriver_TOTPOperations(t *testing.T) {
 	}
 	defer driver.Close()
 
+	// 初始化数据库表结构（测试环境）
+	if err := driver.initSchema(); err != nil {
+		t.Fatalf("初始化数据库失败: %v", err)
+	}
+
 	ctx := context.Background()
 
 	// 创建测试用户
