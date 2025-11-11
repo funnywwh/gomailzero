@@ -12,8 +12,8 @@ WORKDIR /build
 # 复制 go mod 文件
 COPY go.mod go.sum ./
 
-# 下载依赖
-RUN go mod download
+# 下载依赖（先 tidy 确保依赖正确）
+RUN go mod tidy && go mod download
 
 # 复制源代码
 COPY . .
