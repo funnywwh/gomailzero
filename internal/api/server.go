@@ -193,13 +193,11 @@ func authMiddleware(apiKey string, jwtManager *auth.JWTManager) gin.HandlerFunc 
 // totpRequiredMiddleware TOTP 验证中间件（用于敏感操作）
 func totpRequiredMiddleware(totpManager *auth.TOTPManager, storage storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 获取用户邮箱
+		// 获取用户邮箱（JWT 认证会设置，API Key 不会）
 		userEmail, exists := c.Get("user_email")
 		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "未授权",
-			})
-			c.Abort()
+			// API Key 认证不需要 TOTP（管理员操作）
+			c.Next()
 			return
 		}
 
