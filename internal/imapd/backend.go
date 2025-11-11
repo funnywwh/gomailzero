@@ -41,7 +41,7 @@ func (b *Backend) Login(conn *imap.ConnInfo, username, password string) (backend
 // User IMAP 用户
 type User struct {
 	storage storage.Driver
-	user    *storage.User
+	user    *storage.User // 用于 Username() 方法
 }
 
 // NewUser 创建用户

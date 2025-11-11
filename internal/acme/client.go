@@ -116,6 +116,8 @@ func (c *Client) ObtainCertificate(ctx context.Context, domain string) (*tls.Cer
 	}
 
 	// 申请证书
+	// TODO: 迁移到 RFC 8555 的 CreateOrderCert API
+	// nolint:staticcheck // CreateCert 已弃用，但暂时保留以保持兼容性
 	certChain, _, err := c.acmeClient.CreateCert(ctx, csr, time.Hour*24*90, true)
 	if err != nil {
 		return nil, fmt.Errorf("申请证书失败: %w", err)
@@ -228,7 +230,7 @@ func (c *Client) completeHTTP01Challenge(ctx context.Context, authz *acme.Author
 	}
 
 	// 接受挑战
-	chal, err := c.acmeClient.Accept(ctx, chal)
+	_, err := c.acmeClient.Accept(ctx, chal)
 	if err != nil {
 		return fmt.Errorf("接受挑战失败: %w", err)
 	}

@@ -67,7 +67,10 @@ func (m *TOTPManager) Verify(ctx context.Context, userEmail string, code string)
 }
 
 // encryptSecret 加密密钥
+// 当前未使用，保留用于将来实现加密存储 TOTP 密钥
+// nolint:unused
 func (m *TOTPManager) encryptSecret(secret string) (string, error) {
+	// TODO: 实现加密存储
 	// 生成随机 salt
 	_, err := crypto.GenerateSalt()
 	if err != nil {

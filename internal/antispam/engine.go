@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"sync"
 	"time"
 
 	"github.com/gomailzero/gmz/internal/logger"
@@ -19,7 +18,6 @@ type Engine struct {
 	ratelimit *RateLimiter
 	scorer    *Scorer
 	chain     *RuleChain
-	mu        sync.RWMutex
 }
 
 // NewEngine 创建反垃圾邮件引擎
