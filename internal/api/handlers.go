@@ -10,10 +10,10 @@ import (
 )
 
 // listDomainsHandler 列出域名
-func listDomainsHandler(storage storage.Driver) gin.HandlerFunc {
+func listDomainsHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
-		domains, err := storage.ListDomains(ctx)
+		domains, err := driver.ListDomains(ctx)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
@@ -28,7 +28,7 @@ func listDomainsHandler(storage storage.Driver) gin.HandlerFunc {
 }
 
 // createDomainHandler 创建域名
-func createDomainHandler(storage storage.Driver) gin.HandlerFunc {
+func createDomainHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			Name   string `json:"name" binding:"required"`
@@ -45,9 +45,13 @@ func createDomainHandler(storage storage.Driver) gin.HandlerFunc {
 			Name:   req.Name,
 			Active: req.Active,
 		}
+		// 设置默认值
+		if !req.Active {
+			domain.Active = true // 默认激活
+		}
 
 		ctx := c.Request.Context()
-		if err := storage.CreateDomain(ctx, domain); err != nil {
+		if err := driver.CreateDomain(ctx, domain); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
@@ -59,12 +63,12 @@ func createDomainHandler(storage storage.Driver) gin.HandlerFunc {
 }
 
 // getDomainHandler 获取域名
-func getDomainHandler(storage storage.Driver) gin.HandlerFunc {
+func getDomainHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		name := c.Param("name")
 		ctx := c.Request.Context()
 
-		domain, err := storage.GetDomain(ctx, name)
+		domain, err := driver.GetDomain(ctx, name)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": "域名不存在",
@@ -77,7 +81,7 @@ func getDomainHandler(storage storage.Driver) gin.HandlerFunc {
 }
 
 // updateDomainHandler 更新域名
-func updateDomainHandler(storage storage.Driver) gin.HandlerFunc {
+func updateDomainHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		name := c.Param("name")
 		var req struct {
@@ -92,7 +96,7 @@ func updateDomainHandler(storage storage.Driver) gin.HandlerFunc {
 		}
 
 		ctx := c.Request.Context()
-		existing, err := storage.GetDomain(ctx, name)
+		existing, err := driver.GetDomain(ctx, name)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": "域名不存在",
@@ -106,7 +110,7 @@ func updateDomainHandler(storage storage.Driver) gin.HandlerFunc {
 		}
 		domain.Active = req.Active
 
-		if err := storage.UpdateDomain(ctx, domain); err != nil {
+		if err := driver.UpdateDomain(ctx, domain); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
@@ -118,12 +122,12 @@ func updateDomainHandler(storage storage.Driver) gin.HandlerFunc {
 }
 
 // deleteDomainHandler 删除域名
-func deleteDomainHandler(storage storage.Driver) gin.HandlerFunc {
+func deleteDomainHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		name := c.Param("name")
 		ctx := c.Request.Context()
 
-		if err := storage.DeleteDomain(ctx, name); err != nil {
+		if err := driver.DeleteDomain(ctx, name); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
@@ -137,13 +141,13 @@ func deleteDomainHandler(storage storage.Driver) gin.HandlerFunc {
 }
 
 // listUsersHandler 列出用户
-func listUsersHandler(storage storage.Driver) gin.HandlerFunc {
+func listUsersHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
 		offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
 		ctx := c.Request.Context()
-		users, err := storage.ListUsers(ctx, limit, offset)
+		users, err := driver.ListUsers(ctx, limit, offset)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
@@ -158,7 +162,7 @@ func listUsersHandler(storage storage.Driver) gin.HandlerFunc {
 }
 
 // createUserHandler 创建用户
-func createUserHandler(storage storage.Driver) gin.HandlerFunc {
+func createUserHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			Email    string `json:"email" binding:"required"`
@@ -190,7 +194,7 @@ func createUserHandler(storage storage.Driver) gin.HandlerFunc {
 		}
 
 		ctx := c.Request.Context()
-		if err := storage.CreateUser(ctx, user); err != nil {
+		if err := driver.CreateUser(ctx, user); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
@@ -204,12 +208,12 @@ func createUserHandler(storage storage.Driver) gin.HandlerFunc {
 }
 
 // getUserHandler 获取用户
-func getUserHandler(storage storage.Driver) gin.HandlerFunc {
+func getUserHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		email := c.Param("email")
 		ctx := c.Request.Context()
 
-		user, err := storage.GetUser(ctx, email)
+		user, err := driver.GetUser(ctx, email)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": "用户不存在",
@@ -224,7 +228,7 @@ func getUserHandler(storage storage.Driver) gin.HandlerFunc {
 }
 
 // updateUserHandler 更新用户
-func updateUserHandler(storage storage.Driver) gin.HandlerFunc {
+func updateUserHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		email := c.Param("email")
 		var req struct {
@@ -241,7 +245,7 @@ func updateUserHandler(storage storage.Driver) gin.HandlerFunc {
 		}
 
 		ctx := c.Request.Context()
-		user, err := storage.GetUser(ctx, email)
+		user, err := driver.GetUser(ctx, email)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": "用户不存在",
@@ -265,7 +269,7 @@ func updateUserHandler(storage storage.Driver) gin.HandlerFunc {
 		}
 		user.Active = req.Active
 
-		if err := storage.UpdateUser(ctx, user); err != nil {
+		if err := driver.UpdateUser(ctx, user); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
@@ -278,12 +282,12 @@ func updateUserHandler(storage storage.Driver) gin.HandlerFunc {
 }
 
 // deleteUserHandler 删除用户
-func deleteUserHandler(storage storage.Driver) gin.HandlerFunc {
+func deleteUserHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		email := c.Param("email")
 		ctx := c.Request.Context()
 
-		if err := storage.DeleteUser(ctx, email); err != nil {
+		if err := driver.DeleteUser(ctx, email); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
@@ -297,12 +301,12 @@ func deleteUserHandler(storage storage.Driver) gin.HandlerFunc {
 }
 
 // listAliasesHandler 列出别名
-func listAliasesHandler(storage storage.Driver) gin.HandlerFunc {
+func listAliasesHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		domain := c.Query("domain")
 		ctx := c.Request.Context()
 
-		aliases, err := storage.ListAliases(ctx, domain)
+		aliases, err := driver.ListAliases(ctx, domain)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
@@ -317,7 +321,7 @@ func listAliasesHandler(storage storage.Driver) gin.HandlerFunc {
 }
 
 // createAliasHandler 创建别名
-func createAliasHandler(storage storage.Driver) gin.HandlerFunc {
+func createAliasHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			From   string `json:"from" binding:"required"`
@@ -338,7 +342,7 @@ func createAliasHandler(storage storage.Driver) gin.HandlerFunc {
 		}
 
 		ctx := c.Request.Context()
-		if err := storage.CreateAlias(ctx, alias); err != nil {
+		if err := driver.CreateAlias(ctx, alias); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
@@ -350,12 +354,12 @@ func createAliasHandler(storage storage.Driver) gin.HandlerFunc {
 }
 
 // deleteAliasHandler 删除别名
-func deleteAliasHandler(storage storage.Driver) gin.HandlerFunc {
+func deleteAliasHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		from := c.Param("from")
 		ctx := c.Request.Context()
 
-		if err := storage.DeleteAlias(ctx, from); err != nil {
+		if err := driver.DeleteAlias(ctx, from); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
@@ -369,12 +373,12 @@ func deleteAliasHandler(storage storage.Driver) gin.HandlerFunc {
 }
 
 // getQuotaHandler 获取配额
-func getQuotaHandler(storage storage.Driver) gin.HandlerFunc {
+func getQuotaHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		email := c.Param("email")
 		ctx := c.Request.Context()
 
-		quota, err := storage.GetQuota(ctx, email)
+		quota, err := driver.GetQuota(ctx, email)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{
 				"error": "用户不存在",
@@ -387,7 +391,7 @@ func getQuotaHandler(storage storage.Driver) gin.HandlerFunc {
 }
 
 // updateQuotaHandler 更新配额
-func updateQuotaHandler(storage storage.Driver) gin.HandlerFunc {
+func updateQuotaHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		email := c.Param("email")
 		var req struct {
@@ -406,7 +410,7 @@ func updateQuotaHandler(storage storage.Driver) gin.HandlerFunc {
 		}
 
 		ctx := c.Request.Context()
-		if err := storage.UpdateQuota(ctx, email, quota); err != nil {
+		if err := driver.UpdateQuota(ctx, email, quota); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
