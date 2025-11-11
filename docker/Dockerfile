@@ -1,7 +1,7 @@
 # 多阶段构建 Dockerfile for GoMailZero
 
 # 构建阶段
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # 安装必要的构建工具
 RUN apk add --no-cache git make
