@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Login from '../views/Login.vue'
+import Init from '../views/Init.vue'
 import MailList from '../views/MailList.vue'
 import MailView from '../views/MailView.vue'
 import Compose from '../views/Compose.vue'
@@ -10,6 +11,11 @@ const router = createRouter({
     {
       path: '/',
       redirect: '/login'
+    },
+    {
+      path: '/init',
+      name: 'Init',
+      component: Init
     },
     {
       path: '/login',

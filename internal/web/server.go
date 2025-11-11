@@ -54,6 +54,8 @@ func NewServer(cfg *Config) *Server {
 	api := router.Group("/api")
 	{
 		// 公开端点（不需要认证）
+		api.GET("/init/check", checkInitHandler(cfg.Storage))
+		api.POST("/init", initSystemHandler(cfg.Storage, jwtManager, cfg.Domain))
 		api.POST("/login", loginHandler(cfg.Storage, jwtManager, cfg.TOTPManager))
 		
 		// 需要认证的端点

@@ -2,7 +2,8 @@
   <div class="login-container">
     <div class="login-box">
       <h1>GoMailZero</h1>
-      <form @submit.prevent="handleLogin">
+      <div v-if="checkingInit" class="checking">检查系统状态...</div>
+      <form v-else @submit.prevent="handleLogin">
         <div class="form-group">
           <label for="email">邮箱</label>
           <input
@@ -44,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api'
 
@@ -56,6 +57,22 @@ const totpCode = ref('')
 const requiresTOTP = ref(false)
 const loading = ref(false)
 const error = ref('')
+const checkingInit = ref(true)
+
+const checkInit = async () => {
+  try {
+    const response = await api.checkInit()
+    if (response.needs_init) {
+      // 需要初始化，跳转到初始化页面
+      router.push('/init')
+    }
+  } catch (err) {
+    console.error('检查初始化状态失败:', err)
+    // 检查失败不影响登录，继续显示登录页面
+  } finally {
+    checkingInit.value = false
+  }
+}
 
 const handleLogin = async () => {
   loading.value = true
@@ -84,6 +101,10 @@ const handleLogin = async () => {
     loading.value = false
   }
 }
+
+onMounted(() => {
+  checkInit()
+})
 </script>
 
 <style scoped>
@@ -160,6 +181,12 @@ button:disabled {
   color: #e74c3c;
   margin-top: 0.5rem;
   font-size: 0.875rem;
+}
+
+.checking {
+  text-align: center;
+  color: #666;
+  padding: 2rem;
 }
 </style>
 

@@ -217,6 +217,7 @@ func main() {
 		webServer := web.NewServer(&web.Config{
 			Path:        cfg.WebMail.Path,
 			Port:        cfg.WebMail.Port,
+			Domain:      cfg.Domain,
 			Storage:     storageDriver,
 			Maildir:     maildir,
 			JWTSecret:   jwtSecret,
