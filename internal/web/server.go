@@ -27,11 +27,12 @@ type Server struct {
 
 // Config WebMail 配置
 type Config struct {
-	Path      string
-	Port      int
-	Storage   storage.Driver
-	JWTSecret string
-	JWTIssuer string
+	Path        string
+	Port        int
+	Storage     storage.Driver
+	JWTSecret   string
+	JWTIssuer   string
+	TOTPManager *auth.TOTPManager
 }
 
 // NewServer 创建 WebMail 服务器
@@ -52,7 +53,7 @@ func NewServer(cfg *Config) *Server {
 	api := router.Group("/api")
 	{
 		// 公开端点（不需要认证）
-		api.POST("/login", loginHandler(cfg.Storage, jwtManager))
+		api.POST("/login", loginHandler(cfg.Storage, jwtManager, cfg.TOTPManager))
 		
 		// 需要认证的端点
 		api.Use(jwtMiddleware(jwtManager))

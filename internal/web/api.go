@@ -15,7 +15,7 @@ import (
 )
 
 // loginHandler 登录处理器
-func loginHandler(driver storage.Driver, jwtManager *auth.JWTManager) gin.HandlerFunc {
+func loginHandler(driver storage.Driver, jwtManager *auth.JWTManager, totpManager *auth.TOTPManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			Email    string `json:"email" binding:"required"`
@@ -48,7 +48,29 @@ func loginHandler(driver storage.Driver, jwtManager *auth.JWTManager) gin.Handle
 			return
 		}
 
-		// TODO: 验证 TOTP（如果启用）
+		// 验证 TOTP（如果启用）
+		if totpManager != nil {
+			totpEnabled, err := totpManager.IsEnabled(ctx, req.Email)
+			if err == nil && totpEnabled {
+				// 如果启用了 TOTP，必须提供 TOTP 代码
+				if req.TOTPCode == "" {
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"error":        "需要 TOTP 代码",
+						"requires_2fa": true,
+					})
+					return
+				}
+
+				// 验证 TOTP 代码
+				valid, err := totpManager.Verify(ctx, req.Email, req.TOTPCode)
+				if err != nil || !valid {
+					c.JSON(http.StatusUnauthorized, gin.H{
+						"error": "TOTP 代码错误",
+					})
+					return
+				}
+			}
+		}
 
 		// 生成 JWT token
 		token, err := jwtManager.GenerateToken(user.Email, user.ID, false, 24*time.Hour)
