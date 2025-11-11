@@ -123,14 +123,11 @@ jobs:
         continue-on-error: true
       
       - name: Build
-        working-directory: ${{ github.workspace }}
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p bin
-          pwd
-          ls -la cmd/
           go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o bin/gmz-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/gmz
       
       - name: Upload artifacts
