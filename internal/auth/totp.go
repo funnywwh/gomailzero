@@ -6,7 +6,6 @@ import (
 	"encoding/base32"
 	"encoding/base64"
 	"fmt"
-	"time"
 
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
@@ -40,15 +39,8 @@ func (m *TOTPManager) GenerateSecret(ctx context.Context, userEmail string, issu
 		return "", "", fmt.Errorf("生成 TOTP 密钥失败: %w", err)
 	}
 
-	// 加密存储密钥（使用用户密码派生密钥）
-	// TODO: 从用户获取密码或使用单独的加密密钥
-	encryptedSecret, err := m.encryptSecret(key.Secret())
-	if err != nil {
-		return "", "", fmt.Errorf("加密密钥失败: %w", err)
-	}
-
 	// 保存到数据库
-	// TODO: 实现 TOTP 密钥存储
+	// TODO: 实现 TOTP 密钥存储（加密存储）
 
 	return key.Secret(), key.URL(), nil
 }
@@ -77,7 +69,7 @@ func (m *TOTPManager) Verify(ctx context.Context, userEmail string, code string)
 // encryptSecret 加密密钥
 func (m *TOTPManager) encryptSecret(secret string) (string, error) {
 	// 生成随机 salt
-	salt, err := crypto.GenerateSalt()
+	_, err := crypto.GenerateSalt()
 	if err != nil {
 		return "", err
 	}
@@ -96,7 +88,7 @@ func (m *TOTPManager) encryptSecret(secret string) (string, error) {
 	}
 
 	// 编码：salt:encrypted
-	encoded := base64.StdEncoding.EncodeToString(append(salt, encrypted...))
+	encoded := base64.StdEncoding.EncodeToString(encrypted)
 	return encoded, nil
 }
 
@@ -108,19 +100,11 @@ func (m *TOTPManager) decryptSecret(encrypted string) (string, error) {
 		return "", err
 	}
 
-	if len(decoded) < 16 {
-		return "", fmt.Errorf("无效的加密数据")
-	}
-
-	// 提取 salt 和加密数据
-	salt := decoded[:16]
-	encryptedData := decoded[16:]
-
 	// TODO: 使用用户密码派生密钥
 	key := make([]byte, 32) // 临时，应该从用户密码派生
 
 	// 解密
-	decrypted, err := crypto.Decrypt(key, encryptedData)
+	decrypted, err := crypto.Decrypt(key, decoded)
 	if err != nil {
 		return "", err
 	}

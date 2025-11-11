@@ -1,13 +1,11 @@
 package api
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gomailzero/gmz/internal/crypto"
-	"github.com/gomailzero/gmz/internal/logger"
 	"github.com/gomailzero/gmz/internal/storage"
 )
 
@@ -32,16 +30,24 @@ func listDomainsHandler(storage storage.Driver) gin.HandlerFunc {
 // createDomainHandler 创建域名
 func createDomainHandler(storage storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var domain storage.Domain
-		if err := c.ShouldBindJSON(&domain); err != nil {
+		var req struct {
+			Name   string `json:"name" binding:"required"`
+			Active bool   `json:"active"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": err.Error(),
 			})
 			return
 		}
 
+		domain := &storage.Domain{
+			Name:   req.Name,
+			Active: req.Active,
+		}
+
 		ctx := c.Request.Context()
-		if err := storage.CreateDomain(ctx, &domain); err != nil {
+		if err := storage.CreateDomain(ctx, domain); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
@@ -74,8 +80,11 @@ func getDomainHandler(storage storage.Driver) gin.HandlerFunc {
 func updateDomainHandler(storage storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		name := c.Param("name")
-		var domain storage.Domain
-		if err := c.ShouldBindJSON(&domain); err != nil {
+		var req struct {
+			Name   string `json:"name"`
+			Active bool   `json:"active"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": err.Error(),
 			})
@@ -91,8 +100,13 @@ func updateDomainHandler(storage storage.Driver) gin.HandlerFunc {
 			return
 		}
 
-		domain.ID = existing.ID
-		if err := storage.UpdateDomain(ctx, &domain); err != nil {
+		domain := existing
+		if req.Name != "" {
+			domain.Name = req.Name
+		}
+		domain.Active = req.Active
+
+		if err := storage.UpdateDomain(ctx, domain); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
@@ -305,16 +319,26 @@ func listAliasesHandler(storage storage.Driver) gin.HandlerFunc {
 // createAliasHandler 创建别名
 func createAliasHandler(storage storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var alias storage.Alias
-		if err := c.ShouldBindJSON(&alias); err != nil {
+		var req struct {
+			From   string `json:"from" binding:"required"`
+			To     string `json:"to" binding:"required"`
+			Domain string `json:"domain" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": err.Error(),
 			})
 			return
 		}
 
+		alias := &storage.Alias{
+			From:   req.From,
+			To:     req.To,
+			Domain: req.Domain,
+		}
+
 		ctx := c.Request.Context()
-		if err := storage.CreateAlias(ctx, &alias); err != nil {
+		if err := storage.CreateAlias(ctx, alias); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
@@ -366,17 +390,23 @@ func getQuotaHandler(storage storage.Driver) gin.HandlerFunc {
 func updateQuotaHandler(storage storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		email := c.Param("email")
-		var quota storage.Quota
-		if err := c.ShouldBindJSON(&quota); err != nil {
+		var req struct {
+			Limit int64 `json:"limit" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": err.Error(),
 			})
 			return
 		}
 
-		quota.UserEmail = email
+		quota := &storage.Quota{
+			UserEmail: email,
+			Limit:     req.Limit,
+		}
+
 		ctx := c.Request.Context()
-		if err := storage.UpdateQuota(ctx, email, &quota); err != nil {
+		if err := storage.UpdateQuota(ctx, email, quota); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})

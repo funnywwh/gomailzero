@@ -6,7 +6,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/gomailzero/gmz/internal/logger"
 )
 
 // Exporter Prometheus 指标导出器
