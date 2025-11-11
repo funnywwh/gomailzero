@@ -29,6 +29,7 @@ type Server struct {
 type Config struct {
 	Path        string
 	Port        int
+	Domain      string // 主域名，用于初始化
 	Storage     storage.Driver
 	Maildir     *storage.Maildir // Maildir 实例，用于读取邮件体
 	JWTSecret   string

@@ -29,6 +29,13 @@ apiClient.interceptors.response.use(
 )
 
 export const api = {
+  // 检查初始化状态
+  checkInit: () => apiClient.get('/init/check'),
+
+  // 初始化系统
+  initSystem: (data: { email: string; password: string }) =>
+    apiClient.post('/init', data),
+
   // 登录
   login: (data: { email: string; password: string; totp_code?: string }) =>
     apiClient.post('/login', data),
