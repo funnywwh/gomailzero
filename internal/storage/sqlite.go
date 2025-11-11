@@ -85,6 +85,14 @@ func (d *SQLiteDriver) initSchema() error {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
+	CREATE TABLE IF NOT EXISTS totp_secrets (
+		user_email TEXT PRIMARY KEY,
+		secret TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE CASCADE
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_mails_user_folder ON mails(user_email, folder);
 	CREATE INDEX IF NOT EXISTS idx_mails_received_at ON mails(received_at);
 	CREATE INDEX IF NOT EXISTS idx_aliases_from ON aliases(from_addr);

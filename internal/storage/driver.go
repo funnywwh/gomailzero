@@ -38,6 +38,12 @@ type Driver interface {
 	GetQuota(ctx context.Context, userEmail string) (*Quota, error)
 	UpdateQuota(ctx context.Context, userEmail string, quota *Quota) error
 
+	// TOTP 管理
+	SaveTOTPSecret(ctx context.Context, userEmail string, secret string) error
+	GetTOTPSecret(ctx context.Context, userEmail string) (string, error)
+	DeleteTOTPSecret(ctx context.Context, userEmail string) error
+	IsTOTPEnabled(ctx context.Context, userEmail string) (bool, error)
+
 	// 关闭连接
 	Close() error
 }
