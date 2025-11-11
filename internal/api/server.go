@@ -160,4 +160,3 @@ func healthHandler(c *gin.Context) {
 		"time":   time.Now().Unix(),
 	})
 }
-

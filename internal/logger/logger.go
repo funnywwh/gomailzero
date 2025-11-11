@@ -87,4 +87,3 @@ func Warn() *zerolog.Event {
 func Fatal() *zerolog.Event {
 	return globalLogger.Fatal()
 }
-

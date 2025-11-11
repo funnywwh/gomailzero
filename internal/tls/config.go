@@ -15,8 +15,8 @@ func LoadTLSConfig(cfg *config.TLSConfig) (*tls.Config, error) {
 	}
 
 	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS12,
-		MaxVersion: tls.VersionTLS13,
+		MinVersion:               tls.VersionTLS12,
+		MaxVersion:               tls.VersionTLS13,
 		PreferServerCipherSuites: true,
 		CipherSuites: []uint16{
 			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
@@ -86,4 +86,3 @@ func CheckCertificateExpiry(certFile string) error {
 	// TODO: 解析证书并检查过期时间
 	return nil
 }
-

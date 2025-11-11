@@ -252,4 +252,3 @@ func (m *Maildir) ListMails(userEmail string, folder string) ([]string, error) {
 
 	return files, nil
 }
-

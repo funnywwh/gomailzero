@@ -13,20 +13,20 @@ type Exporter struct {
 	registry *prometheus.Registry
 
 	// SMTP 指标
-	smtpConnections    prometheus.Gauge
-	smtpMessages       prometheus.Counter
-	smtpErrors         prometheus.Counter
-	smtpAuthFailures   prometheus.Counter
+	smtpConnections  prometheus.Gauge
+	smtpMessages     prometheus.Counter
+	smtpErrors       prometheus.Counter
+	smtpAuthFailures prometheus.Counter
 
 	// IMAP 指标
-	imapConnections    prometheus.Gauge
-	imapOperations     prometheus.Counter
-	imapErrors         prometheus.Counter
-	imapAuthFailures   prometheus.Counter
+	imapConnections  prometheus.Gauge
+	imapOperations   prometheus.Counter
+	imapErrors       prometheus.Counter
+	imapAuthFailures prometheus.Counter
 
 	// 队列指标
-	queueSize          prometheus.Gauge
-	queueProcessed     prometheus.Counter
+	queueSize      prometheus.Gauge
+	queueProcessed prometheus.Counter
 
 	// TLS 指标
 	tlsHandshakes      prometheus.Counter
@@ -34,8 +34,8 @@ type Exporter struct {
 	tlsCertExpiry      prometheus.Gauge
 
 	// 存储指标
-	storageSize        prometheus.Gauge
-	mailCount          prometheus.Gauge
+	storageSize prometheus.Gauge
+	mailCount   prometheus.Gauge
 }
 
 // NewExporter 创建指标导出器
@@ -229,4 +229,3 @@ func (e *Exporter) SetStorageSize(size float64) {
 func (e *Exporter) SetMailCount(count float64) {
 	e.mailCount.Set(count)
 }
-

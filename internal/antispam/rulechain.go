@@ -30,11 +30,11 @@ type RuleResult struct {
 type Action int
 
 const (
-	ActionContinue Action = iota // 继续
-	ActionAccept                 // 接受
-	ActionQuarantine             // 隔离
-	ActionTempReject             // 临时拒绝
-	ActionReject                 // 拒绝
+	ActionContinue   Action = iota // 继续
+	ActionAccept                   // 接受
+	ActionQuarantine               // 隔离
+	ActionTempReject               // 临时拒绝
+	ActionReject                   // 拒绝
 )
 
 // String 返回动作的字符串表示
@@ -438,4 +438,3 @@ func (r *HELORule) Check(ctx context.Context, req *CheckRequest) (*RuleResult, e
 
 	return &RuleResult{Action: ActionContinue, Continue: true}, nil
 }
-

@@ -39,10 +39,10 @@ func (b *Backend) NewSession(c *smtp.Conn) (smtp.Session, error) {
 
 // Session SMTP 会话
 type Session struct {
-	backend   *Backend
-	conn      *smtp.Conn
-	user      *storage.User
-	from      string
+	backend    *Backend
+	conn       *smtp.Conn
+	user       *storage.User
+	from       string
 	recipients []string
 }
 

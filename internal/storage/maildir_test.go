@@ -129,4 +129,3 @@ func TestMaildir(t *testing.T) {
 		}
 	})
 }
-

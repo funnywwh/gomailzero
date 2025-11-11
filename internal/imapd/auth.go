@@ -38,4 +38,3 @@ func (a *DefaultAuthenticator) Authenticate(ctx context.Context, username, passw
 
 	return user, nil
 }
-

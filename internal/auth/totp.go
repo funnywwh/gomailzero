@@ -7,10 +7,10 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/pquerna/otp"
-	"github.com/pquerna/otp/totp"
 	"github.com/gomailzero/gmz/internal/crypto"
 	"github.com/gomailzero/gmz/internal/storage"
+	"github.com/pquerna/otp"
+	"github.com/pquerna/otp/totp"
 )
 
 // TOTPManager TOTP 管理器
@@ -137,4 +137,3 @@ func (m *TOTPManager) ValidateRecoveryCode(ctx context.Context, userEmail string
 func (m *TOTPManager) QRCodeURL(secret string, issuer string, accountName string) string {
 	return fmt.Sprintf("otpauth://totp/%s:%s?secret=%s&issuer=%s", issuer, accountName, secret, issuer)
 }
-

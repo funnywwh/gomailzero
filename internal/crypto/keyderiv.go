@@ -80,4 +80,3 @@ func GenerateSalt() ([]byte, error) {
 	}
 	return salt, nil
 }
-

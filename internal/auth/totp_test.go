@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pquerna/otp/totp"
 	"github.com/gomailzero/gmz/internal/storage"
+	"github.com/pquerna/otp/totp"
 )
 
 func TestTOTPManager_GenerateSecret(t *testing.T) {
@@ -254,4 +254,3 @@ func (m *MockStorage) UpdateQuota(ctx context.Context, userEmail string, quota *
 func (m *MockStorage) Close() error {
 	return nil
 }
-

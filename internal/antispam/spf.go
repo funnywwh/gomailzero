@@ -188,12 +188,12 @@ type Result int
 
 const (
 	ResultNone      Result = iota // 无结果
-	ResultPass                     // 通过
-	ResultFail                     // 失败
-	ResultSoftFail                 // 软失败
-	ResultNeutral                  // 中性
-	ResultTempError                // 临时错误
-	ResultPermError                // 永久错误
+	ResultPass                    // 通过
+	ResultFail                    // 失败
+	ResultSoftFail                // 软失败
+	ResultNeutral                 // 中性
+	ResultTempError               // 临时错误
+	ResultPermError               // 永久错误
 )
 
 // String 返回结果的字符串表示
@@ -215,4 +215,3 @@ func (r Result) String() string {
 		return "none"
 	}
 }
-

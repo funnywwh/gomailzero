@@ -10,26 +10,26 @@ import (
 
 // Config 应用配置
 type Config struct {
-	NodeID  string      `yaml:"node_id" mapstructure:"node_id"`
-	Domain  string      `yaml:"domain" mapstructure:"domain"`
-	TLS     TLSConfig   `yaml:"tls" mapstructure:"tls"`
-	Storage StorageConfig `yaml:"storage" mapstructure:"storage"`
-	SMTP    SMTPConfig  `yaml:"smtp" mapstructure:"smtp"`
-	IMAP    IMAPConfig  `yaml:"imap" mapstructure:"imap"`
+	NodeID   string         `yaml:"node_id" mapstructure:"node_id"`
+	Domain   string         `yaml:"domain" mapstructure:"domain"`
+	TLS      TLSConfig      `yaml:"tls" mapstructure:"tls"`
+	Storage  StorageConfig  `yaml:"storage" mapstructure:"storage"`
+	SMTP     SMTPConfig     `yaml:"smtp" mapstructure:"smtp"`
+	IMAP     IMAPConfig     `yaml:"imap" mapstructure:"imap"`
 	AntiSpam AntiSpamConfig `yaml:"antispam" mapstructure:"antispam"`
-	WebMail WebMailConfig `yaml:"webmail" mapstructure:"webmail"`
-	Admin   AdminConfig `yaml:"admin" mapstructure:"admin"`
-	Log     LogConfig   `yaml:"log" mapstructure:"log"`
-	Metrics MetricsConfig `yaml:"metrics" mapstructure:"metrics"`
+	WebMail  WebMailConfig  `yaml:"webmail" mapstructure:"webmail"`
+	Admin    AdminConfig    `yaml:"admin" mapstructure:"admin"`
+	Log      LogConfig      `yaml:"log" mapstructure:"log"`
+	Metrics  MetricsConfig  `yaml:"metrics" mapstructure:"metrics"`
 }
 
 // TLSConfig TLS 配置
 type TLSConfig struct {
-	Enabled   bool   `yaml:"enabled" mapstructure:"enabled"`
-	CertFile  string `yaml:"cert_file" mapstructure:"cert_file"`
-	KeyFile   string `yaml:"key_file" mapstructure:"key_file"`
-	ACME      ACMEConfig `yaml:"acme" mapstructure:"acme"`
-	MinVersion string `yaml:"min_version" mapstructure:"min_version"`
+	Enabled    bool       `yaml:"enabled" mapstructure:"enabled"`
+	CertFile   string     `yaml:"cert_file" mapstructure:"cert_file"`
+	KeyFile    string     `yaml:"key_file" mapstructure:"key_file"`
+	ACME       ACMEConfig `yaml:"acme" mapstructure:"acme"`
+	MinVersion string     `yaml:"min_version" mapstructure:"min_version"`
 }
 
 // ACMEConfig ACME 配置
@@ -50,10 +50,10 @@ type StorageConfig struct {
 
 // SMTPConfig SMTP 配置
 type SMTPConfig struct {
-	Enabled  bool     `yaml:"enabled" mapstructure:"enabled"`
-	Ports    []int    `yaml:"ports" mapstructure:"ports"`
-	MaxSize  string   `yaml:"max_size" mapstructure:"max_size"`
-	Hostname string   `yaml:"hostname" mapstructure:"hostname"`
+	Enabled  bool   `yaml:"enabled" mapstructure:"enabled"`
+	Ports    []int  `yaml:"ports" mapstructure:"ports"`
+	MaxSize  string `yaml:"max_size" mapstructure:"max_size"`
+	Hostname string `yaml:"hostname" mapstructure:"hostname"`
 }
 
 // IMAPConfig IMAP 配置
@@ -65,11 +65,11 @@ type IMAPConfig struct {
 
 // AntiSpamConfig 反垃圾配置
 type AntiSpamConfig struct {
-	Enabled    bool   `yaml:"enabled" mapstructure:"enabled"`
-	RspamdURL  string `yaml:"rspamd_url" mapstructure:"rspamd_url"`
-	ClamAVURL  string `yaml:"clamav_url" mapstructure:"clamav_url"`
-	Greylist   bool   `yaml:"greylist" mapstructure:"greylist"`
-	RateLimit  bool   `yaml:"rate_limit" mapstructure:"rate_limit"`
+	Enabled   bool   `yaml:"enabled" mapstructure:"enabled"`
+	RspamdURL string `yaml:"rspamd_url" mapstructure:"rspamd_url"`
+	ClamAVURL string `yaml:"clamav_url" mapstructure:"clamav_url"`
+	Greylist  bool   `yaml:"greylist" mapstructure:"greylist"`
+	RateLimit bool   `yaml:"rate_limit" mapstructure:"rate_limit"`
 }
 
 // WebMailConfig WebMail 配置
@@ -87,7 +87,7 @@ type AdminConfig struct {
 
 // LogConfig 日志配置
 type LogConfig struct {
-	Level  string `yaml:"level" mapstructure:"level"` // trace, debug, info, warn, error, fatal
+	Level  string `yaml:"level" mapstructure:"level"`   // trace, debug, info, warn, error, fatal
 	Format string `yaml:"format" mapstructure:"format"` // json, text
 	Output string `yaml:"output" mapstructure:"output"` // stdout, file path
 }
@@ -251,4 +251,3 @@ func Watch(path string, callback func(*Config) error) error {
 
 	return nil
 }
-

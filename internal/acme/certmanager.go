@@ -13,11 +13,11 @@ import (
 
 // Manager 证书管理器
 type Manager struct {
-	client   *Client
-	config   *config.ACMEConfig
+	client       *Client
+	config       *config.ACMEConfig
 	certificates map[string]*tls.Certificate
-	mu       sync.RWMutex
-	stopCh   chan struct{}
+	mu           sync.RWMutex
+	stopCh       chan struct{}
 }
 
 // NewManager 创建证书管理器
@@ -34,10 +34,10 @@ func NewManager(cfg *config.ACMEConfig) (*Manager, error) {
 	}
 
 	return &Manager{
-		client:      client,
-		config:      cfg,
+		client:       client,
+		config:       cfg,
 		certificates: make(map[string]*tls.Certificate),
-		stopCh:      make(chan struct{}),
+		stopCh:       make(chan struct{}),
 	}, nil
 }
 
@@ -139,4 +139,3 @@ func (m *Manager) ReloadCertificate(domain string) error {
 	logger.Info().Str("domain", domain).Msg("证书已重新加载")
 	return nil
 }
-

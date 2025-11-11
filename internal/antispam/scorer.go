@@ -12,7 +12,7 @@ type Scorer struct {
 // ScoringRule 评分规则
 type ScoringRule struct {
 	Name   string
-	Weight int // 权重（-100 到 100）
+	Weight int                                    // 权重（-100 到 100）
 	Check  func(req *CheckRequest) (bool, string) // 返回 (是否匹配, 原因)
 }
 
@@ -203,4 +203,3 @@ func (s *Scorer) Score(req *CheckRequest, spfResult Result, dkimValid bool, dmar
 func (s *Scorer) AddRule(rule ScoringRule) {
 	s.rules = append(s.rules, rule)
 }
-

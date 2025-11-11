@@ -433,7 +433,7 @@ func (d *SQLiteDriver) StoreMail(ctx context.Context, mail *Mail) error {
 		INSERT INTO mails (id, user_email, folder, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, size, flags, received_at, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	
+
 	// 将切片转换为字符串（简单实现，实际应该使用 JSON）
 	toAddrs := ""
 	if len(mail.To) > 0 {
@@ -442,7 +442,7 @@ func (d *SQLiteDriver) StoreMail(ctx context.Context, mail *Mail) error {
 			toAddrs += "," + mail.To[i]
 		}
 	}
-	
+
 	flags := ""
 	if len(mail.Flags) > 0 {
 		flags = mail.Flags[0]

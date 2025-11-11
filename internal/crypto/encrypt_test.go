@@ -71,4 +71,3 @@ func TestEncryptDecrypt_InvalidCiphertext(t *testing.T) {
 		t.Error("解密无效密文应该失败")
 	}
 }
-

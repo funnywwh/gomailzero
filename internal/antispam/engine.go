@@ -12,26 +12,26 @@ import (
 
 // Engine 反垃圾邮件引擎
 type Engine struct {
-	spf      *SPF
-	dkim     *DKIM
-	dmarc    *DMARC
-	greylist *Greylist
+	spf       *SPF
+	dkim      *DKIM
+	dmarc     *DMARC
+	greylist  *Greylist
 	ratelimit *RateLimiter
-	scorer   *Scorer
-	chain    *RuleChain
-	mu       sync.RWMutex
+	scorer    *Scorer
+	chain     *RuleChain
+	mu        sync.RWMutex
 }
 
 // NewEngine 创建反垃圾邮件引擎
 func NewEngine(spf *SPF, dkim *DKIM, dmarc *DMARC, greylist *Greylist, ratelimit *RateLimiter) *Engine {
 	engine := &Engine{
-		spf:      spf,
-		dkim:     dkim,
-		dmarc:    dmarc,
-		greylist: greylist,
+		spf:       spf,
+		dkim:      dkim,
+		dmarc:     dmarc,
+		greylist:  greylist,
 		ratelimit: ratelimit,
-		scorer:   NewScorer(),
-		chain:    NewRuleChain(),
+		scorer:    NewScorer(),
+		chain:     NewRuleChain(),
 	}
 
 	// 构建规则链
@@ -202,9 +202,9 @@ type Decision int
 
 const (
 	DecisionAccept     Decision = iota // 接受
-	DecisionQuarantine                // 隔离
-	DecisionTempReject                // 临时拒绝
-	DecisionReject                    // 拒绝
+	DecisionQuarantine                 // 隔离
+	DecisionTempReject                 // 临时拒绝
+	DecisionReject                     // 拒绝
 )
 
 // String 返回决策的字符串表示
@@ -222,4 +222,3 @@ func (d Decision) String() string {
 		return "unknown"
 	}
 }
-

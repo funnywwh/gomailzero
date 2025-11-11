@@ -151,27 +151,27 @@ func TestHELORule(t *testing.T) {
 	rule := NewHELORule()
 
 	tests := []struct {
-		name    string
-		helo    string
-		want    Action
+		name      string
+		helo      string
+		want      Action
 		wantScore int
 	}{
 		{
-			name:     "有效 HELO",
-			helo:     "mail.example.com",
-			want:     ActionContinue,
+			name:      "有效 HELO",
+			helo:      "mail.example.com",
+			want:      ActionContinue,
 			wantScore: 0,
 		},
 		{
-			name:     "localhost HELO",
-			helo:     "localhost",
-			want:     ActionContinue,
+			name:      "localhost HELO",
+			helo:      "localhost",
+			want:      ActionContinue,
 			wantScore: 10,
 		},
 		{
-			name:     "空 HELO",
-			helo:     "",
-			want:     ActionContinue,
+			name:      "空 HELO",
+			helo:      "",
+			want:      ActionContinue,
 			wantScore: 10,
 		},
 	}
@@ -225,4 +225,3 @@ func (r *TestRule) Check(ctx context.Context, req *CheckRequest) (*RuleResult, e
 		Continue: r.action == ActionContinue,
 	}, nil
 }
-

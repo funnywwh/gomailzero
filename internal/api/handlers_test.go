@@ -241,4 +241,3 @@ func (m *MockStorageDriver) UpdateQuota(ctx context.Context, userEmail string, q
 func (m *MockStorageDriver) Close() error {
 	return nil
 }
-

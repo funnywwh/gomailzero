@@ -115,4 +115,3 @@ func TestGenerateSalt(t *testing.T) {
 		t.Error("每次生成的 salt 应该不同")
 	}
 }
-

@@ -145,4 +145,3 @@ func (m *MockDNSResolver) LookupTXT(domain string) ([]string, error) {
 	// 返回空的 TXT 记录
 	return []string{}, nil
 }
-

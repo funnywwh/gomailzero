@@ -31,6 +31,7 @@ tls:
 			name: "missing domain",
 			config: `
 node_id: mx1
+domain: ""
 storage:
   driver: sqlite
 `,
@@ -192,4 +193,3 @@ tls:
 		})
 	}
 }
-

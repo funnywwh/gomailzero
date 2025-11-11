@@ -39,4 +39,3 @@ func (r *DefaultDNSResolver) LookupA(domain string) ([]net.IP, error) {
 	}
 	return ips, nil
 }
-

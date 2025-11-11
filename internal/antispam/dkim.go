@@ -221,4 +221,3 @@ func GetPublicKeyDNS(publicKey crypto.PublicKey) (string, error) {
 	// TODO: 实现公钥到 DNS TXT 记录的转换
 	return "", fmt.Errorf("未实现")
 }
-

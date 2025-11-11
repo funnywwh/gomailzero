@@ -132,4 +132,3 @@ func deleteMailHandler(driver storage.Driver) gin.HandlerFunc {
 		})
 	}
 }
-

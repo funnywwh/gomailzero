@@ -126,4 +126,3 @@ func (a *DefaultAuthenticator) Authenticate(ctx context.Context, username, passw
 	logger.Info().Str("username", username).Msg("用户认证成功")
 	return user, nil
 }
-

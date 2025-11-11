@@ -15,9 +15,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"golang.org/x/crypto/acme"
 	"github.com/gomailzero/gmz/internal/config"
 	"github.com/gomailzero/gmz/internal/logger"
+	"golang.org/x/crypto/acme"
 )
 
 // Client ACME 客户端
@@ -284,4 +284,3 @@ func (c *Client) GetCertificate(domain string) (*tls.Certificate, error) {
 
 	return &cert, nil
 }
-

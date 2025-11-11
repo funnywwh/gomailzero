@@ -122,4 +122,3 @@ func TestScorer_AddRule(t *testing.T) {
 		t.Errorf("Scorer.AddRule() rules count = %d, want %d", len(scorer.rules), initialCount+1)
 	}
 }
-

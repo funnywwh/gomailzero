@@ -54,8 +54,8 @@ func (g *Greylist) initSchema() error {
 // Check 检查灰名单
 func (g *Greylist) Check(ctx context.Context, ip, sender, recipient string) (bool, error) {
 	now := time.Now()
-	delay := 5 * time.Minute  // 延迟时间
-	window := 4 * time.Hour    // 时间窗口
+	delay := 5 * time.Minute // 延迟时间
+	window := 4 * time.Hour  // 时间窗口
 
 	// 查询记录
 	var firstSeen, lastSeen time.Time
@@ -130,4 +130,3 @@ func (g *Greylist) Cleanup(ctx context.Context, maxAge time.Duration) error {
 func (g *Greylist) Close() error {
 	return g.db.Close()
 }
-

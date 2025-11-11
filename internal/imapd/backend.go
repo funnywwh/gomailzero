@@ -114,7 +114,7 @@ func (u *User) RenameMailbox(existingName, newName string) error {
 
 // Mailbox 邮箱
 type Mailbox struct {
-	storage storage.Driver
+	storage   storage.Driver
 	userEmail string
 	name      string
 	mails     []*storage.Mail
@@ -280,4 +280,3 @@ func (m *Mailbox) Expunge() error {
 	// TODO: 实现删除邮件功能
 	return fmt.Errorf("未实现")
 }
-

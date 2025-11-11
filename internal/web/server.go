@@ -120,4 +120,3 @@ func loggerMiddleware() gin.HandlerFunc {
 			Msg("WebMail 请求")
 	}
 }
-

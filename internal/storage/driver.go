@@ -46,7 +46,7 @@ type Driver interface {
 type User struct {
 	ID           int64     `json:"id"`
 	Email        string    `json:"email"`
-	PasswordHash string    `json:"-"` // 不序列化
+	PasswordHash string    `json:"-"`     // 不序列化
 	Quota        int64     `json:"quota"` // 字节数，0 表示无限制
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
@@ -66,32 +66,31 @@ type Domain struct {
 type Alias struct {
 	ID        int64     `json:"id"`
 	From      string    `json:"from"` // 源地址
-	To        string    `json:"to"`  // 目标地址
+	To        string    `json:"to"`   // 目标地址
 	Domain    string    `json:"domain"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
 // Mail 邮件
 type Mail struct {
-	ID          string    `json:"id"`
-	UserEmail   string    `json:"user_email"`
-	Folder      string    `json:"folder"` // INBOX, Sent, Drafts, etc.
-	From        string    `json:"from"`
-	To          []string  `json:"to"`
-	Cc          []string  `json:"cc"`
-	Bcc         []string  `json:"bcc"`
-	Subject     string    `json:"subject"`
-	Body        []byte    `json:"-"` // 邮件体（加密存储）
-	Size        int64     `json:"size"`
-	Flags       []string  `json:"flags"` // \Seen, \Answered, \Flagged, etc.
-	ReceivedAt  time.Time `json:"received_at"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID         string    `json:"id"`
+	UserEmail  string    `json:"user_email"`
+	Folder     string    `json:"folder"` // INBOX, Sent, Drafts, etc.
+	From       string    `json:"from"`
+	To         []string  `json:"to"`
+	Cc         []string  `json:"cc"`
+	Bcc        []string  `json:"bcc"`
+	Subject    string    `json:"subject"`
+	Body       []byte    `json:"-"` // 邮件体（加密存储）
+	Size       int64     `json:"size"`
+	Flags      []string  `json:"flags"` // \Seen, \Answered, \Flagged, etc.
+	ReceivedAt time.Time `json:"received_at"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // Quota 配额
 type Quota struct {
 	UserEmail string `json:"user_email"`
-	Used      int64  `json:"used"`      // 已使用字节数
-	Limit     int64  `json:"limit"`     // 限制字节数，0 表示无限制
+	Used      int64  `json:"used"`  // 已使用字节数
+	Limit     int64  `json:"limit"` // 限制字节数，0 表示无限制
 }
-

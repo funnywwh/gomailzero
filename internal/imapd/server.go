@@ -82,4 +82,3 @@ func (s *Server) Stop(ctx context.Context) error {
 	logger.Info().Msg("IMAP 服务器已停止")
 	return nil
 }
-
