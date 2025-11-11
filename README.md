@@ -104,6 +104,47 @@ systemctl start gmz
 - `smtp.ports`: SMTP 监听端口（25, 465, 587）
 - `imap.port`: IMAP 监听端口（993）
 
+## 维护
+
+### 备份
+
+```bash
+# 使用备份脚本
+sudo ./scripts/backup.sh
+
+# 备份文件保存在 /var/lib/gmz/backups/
+```
+
+### 恢复
+
+```bash
+# 使用恢复脚本
+sudo ./scripts/restore.sh /var/lib/gmz/backups/gmz_backup_YYYYMMDD_HHMMSS.tar.gz
+```
+
+### 升级
+
+```bash
+# 构建新版本
+make build
+
+# 使用升级脚本
+sudo ./scripts/upgrade.sh v0.9.1 ./bin/gmz
+```
+
+### 数据库迁移
+
+```bash
+# 查看迁移状态
+./gmz -migrate status -c /etc/gmz/gmz.yml
+
+# 执行迁移
+./gmz -migrate up -c /etc/gmz/gmz.yml
+
+# 回滚迁移
+./gmz -migrate down -c /etc/gmz/gmz.yml
+```
+
 ## 当前实现状态
 
 ### 已完成 ✅
