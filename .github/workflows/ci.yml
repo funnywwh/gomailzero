@@ -79,10 +79,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Run Gosec Security Scanner
-        uses: securego/gosec@master
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          args: './...'
+          go-version: '1.23'
+      
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+      
+      - name: Run Gosec Security Scanner
+        run: gosec ./...
 
   build:
     name: Build
