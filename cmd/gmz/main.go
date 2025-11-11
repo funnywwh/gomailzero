@@ -33,11 +33,22 @@ func main() {
 	var (
 		configPath = flag.String("c", "gmz.yml", "配置文件路径")
 		version    = flag.Bool("version", false, "显示版本信息")
+		migrateCmd = flag.String("migrate", "", "数据库迁移命令 (up|down|status|up-to|down-to)")
+		migrateVer = flag.String("migrate-version", "", "迁移版本号（用于 up-to/down-to）")
 	)
 	flag.Parse()
 
 	if *version {
 		fmt.Printf("gmz version %s (built %s)\n", Version, BuildTime)
+		os.Exit(0)
+	}
+
+	// 处理迁移命令
+	if *migrateCmd != "" {
+		if err := handleMigrateCommand(*migrateCmd, *migrateVer, *configPath); err != nil {
+			fmt.Fprintf(os.Stderr, "迁移失败: %v\n", err)
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 
@@ -71,6 +82,20 @@ func main() {
 			log.Fatal().Err(err).Msg("初始化存储失败")
 		}
 		defer storageDriver.Close()
+
+		// 执行数据库迁移（如果启用）
+		if cfg.Storage.AutoMigrate {
+			migrationsDir, err := migrate.GetMigrationsDir()
+			if err != nil {
+				log.Warn().Err(err).Msg("找不到迁移目录，跳过自动迁移")
+			} else {
+				sqliteDriver := storageDriver.(*storage.SQLiteDriver)
+				if err := sqliteDriver.RunMigrations(ctx, migrationsDir, true); err != nil {
+					log.Fatal().Err(err).Msg("数据库迁移失败")
+				}
+				log.Info().Msg("数据库迁移完成")
+			}
+		}
 	} else {
 		log.Fatal().Str("driver", cfg.Storage.Driver).Msg("不支持的存储驱动")
 	}

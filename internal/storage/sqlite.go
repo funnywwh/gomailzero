@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gomailzero/gmz/internal/migrate"
 	_ "modernc.org/sqlite"
 )
 
@@ -33,12 +34,27 @@ func NewSQLiteDriver(dsn string) (*SQLiteDriver, error) {
 
 	driver := &SQLiteDriver{db: db}
 
-	// 初始化表结构
-	if err := driver.initSchema(); err != nil {
-		return nil, fmt.Errorf("初始化表结构失败: %w", err)
+	return driver, nil
+}
+
+// RunMigrations 执行数据库迁移
+func (d *SQLiteDriver) RunMigrations(ctx context.Context, migrationsDir string, autoMigrate bool) error {
+	if !autoMigrate {
+		// 如果未启用自动迁移，使用旧的 initSchema 方法（向后兼容）
+		return d.initSchema()
 	}
 
-	return driver, nil
+	// 使用 goose 执行迁移
+	if err := migrate.Migrate(ctx, d.db, migrationsDir, "up"); err != nil {
+		return fmt.Errorf("执行数据库迁移失败: %w", err)
+	}
+
+	return nil
+}
+
+// GetDB 获取数据库连接（用于迁移）
+func (d *SQLiteDriver) GetDB() *sql.DB {
+	return d.db
 }
 
 // initSchema 初始化数据库表结构
