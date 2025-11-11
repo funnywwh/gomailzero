@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -178,6 +179,12 @@ func (m *Maildir) ReadMail(userEmail string, folder string, filename string) ([]
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			filePath = filepath.Join(userDir, "."+folder, "new", filename)
 		}
+	}
+
+	// 验证文件路径在 Maildir 根目录下（防止路径遍历攻击）
+	// #nosec G304 -- filePath 已经通过 filepath.Join 和已验证的 userDir 构建，是安全的
+	if !strings.HasPrefix(filePath, m.root) {
+		return nil, fmt.Errorf("无效的文件路径")
 	}
 
 	data, err := os.ReadFile(filePath)

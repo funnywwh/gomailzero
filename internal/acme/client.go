@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gomailzero/gmz/internal/config"
@@ -258,6 +259,12 @@ func (c *Client) saveCertificate(domain string, cert []byte, key []byte) error {
 
 // loadCertificate 加载证书
 func (c *Client) loadCertificate(certFile string) (*x509.Certificate, error) {
+	// 验证文件路径在证书目录下（防止路径遍历攻击）
+	// #nosec G304 -- certFile 已经通过 filepath.Join 和已验证的 c.config.Dir 构建，是安全的
+	if !strings.HasPrefix(certFile, c.config.Dir) {
+		return nil, fmt.Errorf("无效的证书文件路径")
+	}
+	
 	certPEM, err := os.ReadFile(certFile)
 	if err != nil {
 		return nil, fmt.Errorf("读取证书文件失败: %w", err)
