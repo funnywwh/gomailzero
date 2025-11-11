@@ -263,7 +263,7 @@ func (c *Client) loadCertificate(certFile string) (*x509.Certificate, error) {
 	if !strings.HasPrefix(certFile, c.config.Dir) {
 		return nil, fmt.Errorf("无效的证书文件路径")
 	}
-	
+
 	// #nosec G304 -- certFile 已经通过 filepath.Join 和已验证的 c.config.Dir 构建，并且已经验证在 c.config.Dir 目录下，是安全的
 	certPEM, err := os.ReadFile(certFile)
 	if err != nil {

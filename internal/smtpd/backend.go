@@ -41,7 +41,6 @@ func (b *Backend) NewSession(c *smtp.Conn) (smtp.Session, error) {
 type Session struct {
 	backend    *Backend
 	conn       *smtp.Conn
-	user       *storage.User
 	from       string
 	recipients []string
 }
