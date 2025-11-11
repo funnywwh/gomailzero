@@ -65,14 +65,6 @@ func NewServer(cfg *Config) *Server {
 		}
 	}
 
-	return &Server{
-		config:     cfg,
-		storage:    cfg.Storage,
-		jwtManager: jwtManager,
-		router:     router,
-	}
-	}
-
 	// SPA 路由（所有其他路由返回 index.html）
 	router.NoRoute(func(c *gin.Context) {
 		// 返回 index.html
@@ -82,7 +74,7 @@ func NewServer(cfg *Config) *Server {
 	return &Server{
 		config:     cfg,
 		storage:    cfg.Storage,
-		jwtManager: auth.NewJWTManager(cfg.JWTSecret, cfg.JWTIssuer),
+		jwtManager: jwtManager,
 		router:     router,
 	}
 }
