@@ -22,6 +22,11 @@ type Server struct {
 	server  *http.Server
 }
 
+// GetRouter 获取路由（用于测试）
+func (s *Server) GetRouter() *gin.Engine {
+	return s.router
+}
+
 // Config API 配置
 type Config struct {
 	Port       int
