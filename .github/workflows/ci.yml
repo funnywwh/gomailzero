@@ -128,6 +128,11 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p bin
+          ls -la
+          if [ ! -d "./cmd/gmz" ]; then
+            echo "Error: cmd/gmz directory not found"
+            exit 1
+          fi
           go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o bin/gmz-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/gmz
       
       - name: Upload artifacts
