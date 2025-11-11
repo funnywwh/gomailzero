@@ -23,6 +23,11 @@ func TestSQLiteDriver(t *testing.T) {
 	}
 	defer driver.Close()
 
+	// 初始化数据库表结构（测试环境）
+	if err := driver.initSchema(); err != nil {
+		t.Fatalf("初始化数据库失败: %v", err)
+	}
+
 	ctx := context.Background()
 
 	t.Run("CreateUser", func(t *testing.T) {
@@ -153,6 +158,11 @@ func TestSQLiteDriver_Concurrent(t *testing.T) {
 		t.Fatalf("创建驱动失败: %v", err)
 	}
 	defer driver.Close()
+
+	// 初始化数据库表结构（测试环境）
+	if err := driver.initSchema(); err != nil {
+		t.Fatalf("初始化数据库失败: %v", err)
+	}
 
 	ctx := context.Background()
 
