@@ -17,22 +17,52 @@ type Engine struct {
 	dmarc    *DMARC
 	greylist *Greylist
 	ratelimit *RateLimiter
+	scorer   *Scorer
+	chain    *RuleChain
 	mu       sync.RWMutex
 }
 
 // NewEngine 创建反垃圾邮件引擎
 func NewEngine(spf *SPF, dkim *DKIM, dmarc *DMARC, greylist *Greylist, ratelimit *RateLimiter) *Engine {
-	return &Engine{
+	engine := &Engine{
 		spf:      spf,
 		dkim:     dkim,
 		dmarc:    dmarc,
 		greylist: greylist,
 		ratelimit: ratelimit,
+		scorer:   NewScorer(),
+		chain:    NewRuleChain(),
 	}
+
+	// 构建规则链
+	if ratelimit != nil {
+		engine.chain.AddRule(NewRateLimitRule(ratelimit, 100, 60))
+	}
+	if greylist != nil {
+		engine.chain.AddRule(NewGreylistRule(greylist))
+	}
+	if spf != nil {
+		engine.chain.AddRule(NewSPFRule(spf))
+	}
+	if dkim != nil {
+		engine.chain.AddRule(NewDKIMRule(dkim))
+	}
+	if dmarc != nil {
+		engine.chain.AddRule(NewDMARCRule(dmarc, spf, dkim))
+	}
+	engine.chain.AddRule(NewHELORule())
+
+	return engine
 }
 
-// Check 检查邮件
+// Check 检查邮件（使用规则链）
 func (e *Engine) Check(ctx context.Context, req *CheckRequest) (*CheckResult, error) {
+	// 使用规则链执行检查
+	return e.chain.Execute(ctx, req)
+}
+
+// CheckLegacy 检查邮件（旧版实现，保留用于兼容）
+func (e *Engine) CheckLegacy(ctx context.Context, req *CheckRequest) (*CheckResult, error) {
 	result := &CheckResult{
 		Score:    0,
 		Reasons:  []string{},
@@ -63,8 +93,10 @@ func (e *Engine) Check(ctx context.Context, req *CheckRequest) (*CheckResult, er
 	}
 
 	// 3. SPF 检查
+	spfResult := ResultNone
 	if e.spf != nil && req.Domain != "" {
-		spfResult, err := e.spf.Check(req.IP, req.Domain, req.HELO)
+		var err error
+		spfResult, err = e.spf.Check(req.IP, req.Domain, req.HELO)
 		if err != nil {
 			logger.Warn().Err(err).Msg("SPF 检查失败")
 		} else {
@@ -83,8 +115,10 @@ func (e *Engine) Check(ctx context.Context, req *CheckRequest) (*CheckResult, er
 	}
 
 	// 4. DKIM 检查
+	dkimValid := false
 	if e.dkim != nil && req.DKIMSignature != "" {
-		dkimValid, err := e.dkim.Verify(req.Headers, req.Body, req.DKIMSignature)
+		var err error
+		dkimValid, err = e.dkim.Verify(req.Headers, req.Body, req.DKIMSignature)
 		if err != nil {
 			logger.Warn().Err(err).Msg("DKIM 验证失败")
 		} else if !dkimValid {
@@ -98,15 +132,6 @@ func (e *Engine) Check(ctx context.Context, req *CheckRequest) (*CheckResult, er
 
 	// 5. DMARC 检查
 	if e.dmarc != nil && req.Domain != "" {
-		spfResult := ResultNone
-		if e.spf != nil {
-			spfResult, _ = e.spf.Check(req.IP, req.Domain, req.HELO)
-		}
-		dkimValid := false
-		if e.dkim != nil && req.DKIMSignature != "" {
-			dkimValid, _ = e.dkim.Verify(req.Headers, req.Body, req.DKIMSignature)
-		}
-
 		dmarcPolicy, err := e.dmarc.Check(req.Domain, spfResult, dkimValid)
 		if err != nil {
 			logger.Warn().Err(err).Msg("DMARC 检查失败")
