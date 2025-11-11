@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gomailzero/gmz/internal/crypto"
 	"github.com/gomailzero/gmz/internal/logger"
 	"github.com/gomailzero/gmz/internal/storage"
 )
@@ -120,8 +121,16 @@ func (a *DefaultAuthenticator) Authenticate(ctx context.Context, username, passw
 		return nil, fmt.Errorf("认证失败")
 	}
 
-	// TODO: 验证密码（使用 Argon2id）
-	// 这里暂时跳过密码验证，后续实现加密模块时补充
+	// 验证密码（使用 Argon2id）
+	valid, err := crypto.VerifyPassword(password, user.PasswordHash)
+	if err != nil {
+		logger.Warn().Err(err).Str("username", username).Msg("密码验证失败")
+		return nil, fmt.Errorf("认证失败")
+	}
+	if !valid {
+		logger.Warn().Str("username", username).Msg("密码错误")
+		return nil, fmt.Errorf("认证失败")
+	}
 
 	logger.Info().Str("username", username).Msg("用户认证成功")
 	return user, nil
