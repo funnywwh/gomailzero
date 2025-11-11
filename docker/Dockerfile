@@ -24,15 +24,13 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -o gmz ./cmd/gmz
 
 # 运行阶段
-FROM alpine:latest
+# 使用 distroless 镜像以减小体积和提高安全性
+FROM gcr.io/distroless/static:nonroot
 
-# 安装必要的运行时依赖
-RUN apk add --no-cache ca-certificates tzdata && \
-    update-ca-certificates
-
-# 创建非 root 用户
-RUN addgroup -g 1000 gmz && \
-    adduser -D -u 1000 -G gmz gmz
+# 或者使用 alpine（如果需要 shell 等工具）
+# FROM alpine:latest
+# RUN apk add --no-cache ca-certificates tzdata && \
+#     update-ca-certificates
 
 # 设置工作目录
 WORKDIR /app
@@ -43,12 +41,8 @@ COPY --from=builder /build/gmz /app/gmz
 # 复制配置示例
 COPY --from=builder /build/configs/gmz.yml.example /app/configs/gmz.yml.example
 
-# 创建必要的目录
-RUN mkdir -p /app/data /app/logs /app/certs && \
-    chown -R gmz:gmz /app
-
-# 切换到非 root 用户
-USER gmz
+# distroless 镜像已经使用 nonroot 用户（uid:gid = 65532:65532）
+# 不需要创建用户或设置权限
 
 # 暴露端口
 EXPOSE 25 465 587 993 8080 9090

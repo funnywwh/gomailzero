@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  gmz:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: gomailzero
+    restart: unless-stopped
+    ports:
+      - "25:25"      # SMTP
+      - "465:465"    # SMTPS
+      - "587:587"    # SMTP (STARTTLS)
+      - "993:993"    # IMAPS
+      - "8080:8080"  # WebMail
+      - "8081:8081"  # Admin API
+      - "9090:9090"  # Metrics
+    volumes:
+      - gmz-data:/var/lib/gmz
+      - gmz-config:/etc/gmz
+      - gmz-certs:/var/lib/gmz/certs
+    environment:
+      - TZ=Asia/Shanghai
+    networks:
+      - gmz-network
+    # 如果需要访问外部网络（用于 ACME 证书申请）
+    # network_mode: "host"
+    # 或者使用 host 网络模式（需要 root 权限）
+    # network_mode: "host"
+    # privileged: true
+
+volumes:
+  gmz-data:
+    driver: local
+  gmz-config:
+    driver: local
+  gmz-certs:
+    driver: local
+
+networks:
+  gmz-network:
+    driver: bridge
+

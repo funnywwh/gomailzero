@@ -51,7 +51,17 @@ sudo cp configs/gmz.yml.example /etc/gmz/gmz.yml
 #### 方式三：使用 Docker
 
 ```bash
-docker pull funnywwh/gomailzero:latest
+# 使用 docker-compose（推荐）
+docker-compose up -d
+
+# 或直接运行
+docker run -d \
+  --name gomailzero \
+  -p 25:25 -p 465:465 -p 587:587 -p 993:993 \
+  -p 8080:8080 -p 8081:8081 -p 9090:9090 \
+  -v gmz-data:/var/lib/gmz \
+  -v gmz-config:/etc/gmz \
+  funnywwh/gomailzero:latest
 ```
 
 ### 配置
@@ -227,6 +237,51 @@ make lint
 
 # 安全扫描
 make security
+```
+
+## Docker 部署
+
+### 使用 docker-compose
+
+```bash
+# 启动服务
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down
+
+# 查看状态
+docker-compose ps
+```
+
+### 开发环境
+
+```bash
+# 使用开发配置（挂载源代码，支持热重载）
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+### 数据持久化
+
+Docker Compose 使用命名卷来持久化数据：
+- `gmz-data`: 数据库和邮件数据
+- `gmz-config`: 配置文件
+- `gmz-certs`: TLS 证书
+
+### 自定义配置
+
+1. 创建 `docker-compose.override.yml`（不会被 git 跟踪）
+2. 覆盖默认配置
+
+```yaml
+version: '3.8'
+services:
+  gmz:
+    volumes:
+      - ./my-config.yml:/etc/gmz/gmz.yml:ro
 ```
 
 ## 项目结构

@@ -1,0 +1,25 @@
+version: '3.8'
+
+# 开发环境配置
+# 用法: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  gmz:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: builder  # 使用构建阶段进行开发
+    volumes:
+      # 挂载源代码（用于热重载开发）
+      - .:/build
+      # 挂载配置和数据
+      - gmz-data:/var/lib/gmz
+      - gmz-config:/etc/gmz
+      - ./configs/gmz.yml.example:/app/configs/gmz.yml.example:ro
+    environment:
+      - GO_ENV=development
+      - LOG_LEVEL=debug
+    command: ["go", "run", "./cmd/gmz/main.go", "-c", "/app/configs/gmz.yml.example"]
+    # 开发环境可以使用 root 用户
+    user: root
+
