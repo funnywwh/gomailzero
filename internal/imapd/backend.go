@@ -239,46 +239,44 @@ func (m *Mailbox) SearchMessages(uid bool, criteria *imap.SearchCriteria) ([]uin
 
 		// 检查搜索条件
 		if criteria != nil {
-			// 检查标志
-			if len(criteria.Flag) > 0 {
-				hasFlag := false
-				for _, searchFlag := range criteria.Flag {
+			// 检查必须包含的标志
+			if len(criteria.WithFlags) > 0 {
+				hasAllFlags := true
+				for _, searchFlag := range criteria.WithFlags {
+					hasFlag := false
 					for _, mailFlag := range mail.Flags {
 						if mailFlag == searchFlag {
 							hasFlag = true
 							break
 						}
 					}
-					if hasFlag {
+					if !hasFlag {
+						hasAllFlags = false
 						break
 					}
 				}
-				if !hasFlag {
+				if !hasAllFlags {
 					matched = false
 				}
 			}
 
-			// 检查未读（\Seen 标志）
-			if criteria.NotFlag != nil {
-				for _, notFlag := range criteria.NotFlag {
-					if notFlag == imap.SeenFlag {
-						hasSeen := false
-						for _, mailFlag := range mail.Flags {
-							if mailFlag == imap.SeenFlag {
-								hasSeen = true
-								break
-							}
-						}
-						if hasSeen {
+			// 检查不能包含的标志
+			if len(criteria.WithoutFlags) > 0 {
+				for _, notFlag := range criteria.WithoutFlags {
+					for _, mailFlag := range mail.Flags {
+						if mailFlag == notFlag {
 							matched = false
 							break
 						}
 					}
+					if !matched {
+						break
+					}
 				}
 			}
 
-			// 检查主题（简化实现）
-			if criteria.Header != nil {
+			// 检查邮件头（简化实现）
+			if len(criteria.Header) > 0 {
 				for key, values := range criteria.Header {
 					if key == "Subject" {
 						subjectMatched := false
@@ -293,6 +291,28 @@ func (m *Mailbox) SearchMessages(uid bool, criteria *imap.SearchCriteria) ([]uin
 							break
 						}
 					}
+				}
+			}
+
+			// 检查邮件体
+			if len(criteria.Body) > 0 {
+				bodyMatched := false
+				bodyStr := string(mail.Body)
+				for _, searchText := range criteria.Body {
+					if contains(bodyStr, searchText) {
+						bodyMatched = true
+						break
+					}
+				}
+				if !bodyMatched {
+					matched = false
+				}
+			}
+
+			// 检查序列号
+			if criteria.SeqNum != nil {
+				if !criteria.SeqNum.Contains(seqNum) {
+					matched = false
 				}
 			}
 		}
