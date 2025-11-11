@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gomailzero/gmz/internal/api"
 	"github.com/gomailzero/gmz/internal/config"
@@ -150,8 +151,9 @@ func main() {
 		mux.Handle(cfg.Metrics.Path, exporter.Handler())
 
 		metricsServer := &http.Server{
-			Addr:    fmt.Sprintf(":%d", cfg.Metrics.Port),
-			Handler: mux,
+			Addr:              fmt.Sprintf(":%d", cfg.Metrics.Port),
+			Handler:           mux,
+			ReadHeaderTimeout: 5 * time.Second, // 防止 Slowloris 攻击
 		}
 
 		go func() {
@@ -222,6 +224,9 @@ func parseSize(sizeStr string) int64 {
 	}
 
 	var size int64
-	fmt.Sscanf(value, "%d", &size)
+	if _, err := fmt.Sscanf(value, "%d", &size); err != nil {
+		// 如果解析失败，返回 0
+		return 0
+	}
 	return size * multiplier
 }
