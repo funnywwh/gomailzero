@@ -82,11 +82,12 @@ func NewServer(cfg *Config) *Server {
 // Start 启动服务器
 func (s *Server) Start(ctx context.Context) error {
 	s.server = &http.Server{
-		Addr:         fmt.Sprintf(":%d", s.config.Port),
-		Handler:      s.router,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              fmt.Sprintf(":%d", s.config.Port),
+		Handler:           s.router,
+		ReadHeaderTimeout: 5 * time.Second, // 防止 Slowloris 攻击
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	logger.Info().Int("port", s.config.Port).Str("path", s.config.Path).Msg("WebMail 服务器启动")
