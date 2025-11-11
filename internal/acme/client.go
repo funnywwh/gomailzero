@@ -264,7 +264,7 @@ func (c *Client) loadCertificate(certFile string) (*x509.Certificate, error) {
 	if !strings.HasPrefix(certFile, c.config.Dir) {
 		return nil, fmt.Errorf("无效的证书文件路径")
 	}
-	
+
 	certPEM, err := os.ReadFile(certFile)
 	if err != nil {
 		return nil, fmt.Errorf("读取证书文件失败: %w", err)

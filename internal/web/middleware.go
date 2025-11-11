@@ -52,22 +52,3 @@ func jwtMiddleware(jwtManager *auth.JWTManager) gin.HandlerFunc {
 	}
 }
 
-// optionalJWTMiddleware 可选的 JWT 认证中间件（用于某些公开端点）
-func optionalJWTMiddleware(jwtManager *auth.JWTManager) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader != "" {
-			parts := strings.Split(authHeader, " ")
-			if len(parts) == 2 && parts[0] == "Bearer" {
-				claims, err := jwtManager.ValidateToken(parts[1])
-				if err == nil {
-					c.Set("user_email", claims.Email)
-					c.Set("user_id", claims.UserID)
-					c.Set("is_admin", claims.IsAdmin)
-				}
-			}
-		}
-		c.Next()
-	}
-}
-

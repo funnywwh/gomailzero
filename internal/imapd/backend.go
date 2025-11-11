@@ -41,7 +41,8 @@ func (b *Backend) Login(conn *imap.ConnInfo, username, password string) (backend
 // User IMAP 用户
 type User struct {
 	storage storage.Driver
-	user    *storage.User // 用于 Username() 方法
+	//nolint:unused // user 字段在 Username()、ListMailboxes() 和 GetMailbox() 方法中被使用
+	user *storage.User
 }
 
 // NewUser 创建用户
