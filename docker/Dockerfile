@@ -53,9 +53,9 @@ USER gmz
 # 暴露端口
 EXPOSE 25 465 587 993 8080 9090
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+# 健康检查（如果管理 API 启用）
+# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+#     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 # 设置入口点
 ENTRYPOINT ["/app/gmz"]
