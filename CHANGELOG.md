@@ -35,6 +35,6 @@
 - SMTP/IMAP 服务器核心功能
 - 存储和加密模块
 
-[Unreleased]: https://github.com/gomailzero/gmz/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/gomailzero/gmz/releases/tag/v0.1.0
+[Unreleased]: https://github.com/funnywwh/gomailzero/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/funnywwh/gomailzero/releases/tag/v0.1.0
 

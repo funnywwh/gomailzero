@@ -54,7 +54,7 @@ cp /etc/gmz/gmz.yml /etc/gmz/gmz.yml.backup.$(date +%Y%m%d)
 cat CHANGELOG.md
 
 # 或查看 Release Notes
-curl https://api.github.com/repos/gomailzero/gmz/releases/latest
+curl https://api.github.com/repos/funnywwh/gomailzero/releases/latest
 ```
 
 ### 4. 检查数据库迁移
@@ -73,7 +73,7 @@ curl https://api.github.com/repos/gomailzero/gmz/releases/latest
 
 ```bash
 # 下载新版本
-wget https://github.com/gomailzero/gmz/releases/download/v0.9.1/gmz-linux-amd64 -O /tmp/gmz-new
+wget https://github.com/funnywwh/gomailzero/releases/download/v0.9.1/gmz-linux-amd64 -O /tmp/gmz-new
 
 # 执行升级脚本
 ./scripts/upgrade.sh v0.9.1 /tmp/gmz-new
@@ -103,7 +103,7 @@ systemctl reload gmz
 ./scripts/backup.sh
 
 # 3. 下载新版本
-wget https://github.com/gomailzero/gmz/releases/download/v0.9.1/gmz-linux-amd64 -O /tmp/gmz-new
+wget https://github.com/funnywwh/gomailzero/releases/download/v0.9.1/gmz-linux-amd64 -O /tmp/gmz-new
 chmod +x /tmp/gmz-new
 
 # 4. 检查新版本
@@ -142,7 +142,7 @@ systemctl stop gmz
 ./scripts/backup.sh
 
 # 3. 下载新版本
-wget https://github.com/gomailzero/gmz/releases/download/v0.9.1/gmz-linux-amd64 -O /tmp/gmz-new
+wget https://github.com/funnywwh/gomailzero/releases/download/v0.9.1/gmz-linux-amd64 -O /tmp/gmz-new
 chmod +x /tmp/gmz-new
 
 # 4. 检查新版本
@@ -567,8 +567,8 @@ fi
 
 1. 查看日志: `journalctl -u gmz -n 100`
 2. 查看文档: `README.md`, `UPGRADE.md`
-3. 提交 Issue: https://github.com/gomailzero/gmz/issues
-4. 社区讨论: https://github.com/gomailzero/gmz/discussions
+3. 提交 Issue: https://github.com/funnywwh/gomailzero/issues
+4. 社区讨论: https://github.com/funnywwh/gomailzero/discussions
 
 ---
 

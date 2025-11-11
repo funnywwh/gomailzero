@@ -21,16 +21,16 @@
 
 ```bash
 # 从源码构建
-git clone https://github.com/gomailzero/gmz.git
-cd gmz
+git clone https://github.com/funnywwh/gomailzero.git
+cd gomailzero
 make build
 
 # 或下载预编译二进制
-wget https://github.com/gomailzero/gmz/releases/download/v0.9.0/gmz-linux-amd64 -O /usr/local/bin/gmz
+wget https://github.com/funnywwh/gomailzero/releases/download/v0.9.0/gmz-linux-amd64 -O /usr/local/bin/gmz
 chmod +x /usr/local/bin/gmz
 
 # 或使用 Docker
-docker pull gomailzero/gmz:latest
+docker pull funnywwh/gomailzero:latest
 ```
 
 ### 配置
