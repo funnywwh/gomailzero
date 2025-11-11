@@ -231,12 +231,92 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 
 // SearchMessages 搜索邮件
 func (m *Mailbox) SearchMessages(uid bool, criteria *imap.SearchCriteria) ([]uint32, error) {
-	// TODO: 实现搜索功能
 	var results []uint32
-	for i := range m.mails {
-		results = append(results, uint32(i+1))
+
+	for i, mail := range m.mails {
+		seqNum := uint32(i + 1)
+		matched := true
+
+		// 检查搜索条件
+		if criteria != nil {
+			// 检查标志
+			if len(criteria.Flag) > 0 {
+				hasFlag := false
+				for _, searchFlag := range criteria.Flag {
+					for _, mailFlag := range mail.Flags {
+						if mailFlag == searchFlag {
+							hasFlag = true
+							break
+						}
+					}
+					if hasFlag {
+						break
+					}
+				}
+				if !hasFlag {
+					matched = false
+				}
+			}
+
+			// 检查未读（\Seen 标志）
+			if criteria.NotFlag != nil {
+				for _, notFlag := range criteria.NotFlag {
+					if notFlag == imap.SeenFlag {
+						hasSeen := false
+						for _, mailFlag := range mail.Flags {
+							if mailFlag == imap.SeenFlag {
+								hasSeen = true
+								break
+							}
+						}
+						if hasSeen {
+							matched = false
+							break
+						}
+					}
+				}
+			}
+
+			// 检查主题（简化实现）
+			if criteria.Header != nil {
+				for key, values := range criteria.Header {
+					if key == "Subject" {
+						subjectMatched := false
+						for _, value := range values {
+							if contains(mail.Subject, value) {
+								subjectMatched = true
+								break
+							}
+						}
+						if !subjectMatched {
+							matched = false
+							break
+						}
+					}
+				}
+			}
+		}
+
+		if matched {
+			results = append(results, seqNum)
+		}
 	}
+
 	return results, nil
+}
+
+// contains 检查字符串是否包含子串（不区分大小写）
+func contains(s, substr string) bool {
+	if len(s) < len(substr) {
+		return false
+	}
+	// 使用简单的字符串包含检查（区分大小写）
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 // CreateMessage 创建邮件
@@ -247,36 +327,158 @@ func (m *Mailbox) CreateMessage(flags []string, date time.Time, body imap.Litera
 
 // AddFlags 添加标志
 func (m *Mailbox) AddFlags(uid bool, seqSet *imap.SeqSet, flags []string) error {
-	// TODO: 实现添加标志功能
-	return fmt.Errorf("未实现")
+	return m.UpdateMessagesFlags(uid, seqSet, imap.AddFlags, flags)
 }
 
 // SetFlags 设置标志
 func (m *Mailbox) SetFlags(uid bool, seqSet *imap.SeqSet, flags []string) error {
-	// TODO: 实现设置标志功能
-	return fmt.Errorf("未实现")
+	return m.UpdateMessagesFlags(uid, seqSet, imap.SetFlags, flags)
 }
 
 // StoreFlags 存储标志
 func (m *Mailbox) StoreFlags(uid bool, seqSet *imap.SeqSet, flags []string, op imap.FlagsOp) error {
-	// TODO: 实现存储标志功能
-	return fmt.Errorf("未实现")
+	return m.UpdateMessagesFlags(uid, seqSet, op, flags)
 }
 
 // UpdateMessagesFlags 更新消息标志
 func (m *Mailbox) UpdateMessagesFlags(uid bool, seqSet *imap.SeqSet, op imap.FlagsOp, flags []string) error {
-	// TODO: 实现更新消息标志功能
-	return fmt.Errorf("未实现")
+	ctx := context.Background()
+
+	// 遍历序列集
+	for i, mail := range m.mails {
+		seqNum := uint32(i + 1)
+		if seqSet != nil && !seqSet.Contains(seqNum) {
+			continue
+		}
+
+		var newFlags []string
+		switch op {
+		case imap.AddFlags:
+			// 添加标志
+			flagMap := make(map[string]bool)
+			for _, f := range mail.Flags {
+				flagMap[f] = true
+			}
+			for _, f := range flags {
+				flagMap[f] = true
+			}
+			newFlags = make([]string, 0, len(flagMap))
+			for f := range flagMap {
+				newFlags = append(newFlags, f)
+			}
+		case imap.SetFlags:
+			// 设置标志
+			newFlags = flags
+		case imap.RemoveFlags:
+			// 移除标志
+			flagMap := make(map[string]bool)
+			for _, f := range mail.Flags {
+				flagMap[f] = true
+			}
+			for _, f := range flags {
+				delete(flagMap, f)
+			}
+			newFlags = make([]string, 0, len(flagMap))
+			for f := range flagMap {
+				newFlags = append(newFlags, f)
+			}
+		}
+
+		// 更新存储
+		if err := m.storage.UpdateMailFlags(ctx, mail.ID, newFlags); err != nil {
+			return fmt.Errorf("更新邮件标志失败: %w", err)
+		}
+
+		// 更新内存中的标志
+		mail.Flags = newFlags
+	}
+
+	return nil
 }
 
-// CopyMessages 复制邮件
+// CopyMessages 复制邮件到目标邮箱
 func (m *Mailbox) CopyMessages(uid bool, seqSet *imap.SeqSet, dest string) error {
-	// TODO: 实现复制邮件功能
-	return fmt.Errorf("未实现")
+	ctx := context.Background()
+
+	// 获取目标邮箱的邮件列表
+	destMails, err := m.storage.ListMails(ctx, m.userEmail, dest, 1000, 0)
+	if err != nil {
+		// 如果目标邮箱不存在，创建空列表
+		destMails = []*storage.Mail{}
+	}
+
+	// 复制选中的邮件
+	for i, mail := range m.mails {
+		seqNum := uint32(i + 1)
+		if seqSet != nil && !seqSet.Contains(seqNum) {
+			continue
+		}
+
+		// 创建新邮件副本
+		newMail := &storage.Mail{
+			UserEmail:  mail.UserEmail,
+			Folder:     dest,
+			From:       mail.From,
+			To:         mail.To,
+			Cc:         mail.Cc,
+			Bcc:        mail.Bcc,
+			Subject:    mail.Subject,
+			Body:       mail.Body,
+			Size:       mail.Size,
+			Flags:      []string{}, // 新邮件没有标志
+			ReceivedAt: mail.ReceivedAt,
+			CreatedAt:  time.Now(),
+		}
+
+		// 生成新 ID
+		newMail.ID = fmt.Sprintf("%s-%d", dest, len(destMails)+1)
+
+		// 存储到目标邮箱
+		if err := m.storage.StoreMail(ctx, newMail); err != nil {
+			return fmt.Errorf("复制邮件失败: %w", err)
+		}
+	}
+
+	return nil
 }
 
-// Expunge 删除邮件
+// Expunge 删除邮件（标记为 \Deleted 的邮件）
 func (m *Mailbox) Expunge() error {
-	// TODO: 实现删除邮件功能
-	return fmt.Errorf("未实现")
+	ctx := context.Background()
+
+	var toDelete []string
+	for _, mail := range m.mails {
+		// 检查是否有 \Deleted 标志
+		for _, flag := range mail.Flags {
+			if flag == imap.DeletedFlag {
+				toDelete = append(toDelete, mail.ID)
+				break
+			}
+		}
+	}
+
+	// 删除邮件
+	for _, id := range toDelete {
+		if err := m.storage.DeleteMail(ctx, id); err != nil {
+			return fmt.Errorf("删除邮件失败: %w", err)
+		}
+	}
+
+	// 从内存中移除
+	var remaining []*storage.Mail
+	for _, mail := range m.mails {
+		hasDeleted := false
+		for _, flag := range mail.Flags {
+			if flag == imap.DeletedFlag {
+				hasDeleted = true
+				break
+			}
+		}
+		if !hasDeleted {
+			remaining = append(remaining, mail)
+		}
+	}
+	m.mails = remaining
+
+	return nil
 }

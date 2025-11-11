@@ -40,6 +40,7 @@ func NewServer(cfg *Config) *Server {
 
 	// API 路由组
 	api := router.Group("/api/v1")
+	// 支持 API Key 和 JWT 两种认证方式
 	api.Use(authMiddleware(cfg.APIKey))
 
 	// 域名管理
