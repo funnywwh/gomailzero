@@ -155,7 +155,7 @@ jobs:
         with:
           context: .
           file: ./docker/Dockerfile
-          push: ${{ secrets.DOCKER_USERNAME != '' && 'true' || 'false' }}
+          push: ${{ secrets.DOCKER_USERNAME && true || false }}
           tags: |
             gomailzero/gmz:latest
             gomailzero/gmz:${{ github.ref_name }}
