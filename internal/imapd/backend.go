@@ -198,6 +198,7 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 		// #nosec G115 -- 循环索引 i 在合理范围内，不会溢出 uint32
 		seqNum := uint32(i + 1)
 		if uid {
+			// #nosec G115 -- 循环索引 i 在合理范围内，不会溢出 uint32
 			seqNum = uint32(i + 1) // TODO: 使用实际的 UID
 		}
 

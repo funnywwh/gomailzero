@@ -182,11 +182,11 @@ func (m *Maildir) ReadMail(userEmail string, folder string, filename string) ([]
 	}
 
 	// 验证文件路径在 Maildir 根目录下（防止路径遍历攻击）
-	// #nosec G304 -- filePath 已经通过 filepath.Join 和已验证的 userDir 构建，是安全的
 	if !strings.HasPrefix(filePath, m.root) {
 		return nil, fmt.Errorf("无效的文件路径")
 	}
 
+	// #nosec G304 -- filePath 已经通过 filepath.Join 和已验证的 userDir 构建，并且已经验证在 m.root 目录下，是安全的
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("读取邮件文件失败: %w", err)
