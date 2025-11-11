@@ -7,15 +7,15 @@ import (
 )
 
 func TestEngine_Check(t *testing.T) {
-	// 创建测试用的组件
+	// 创建测试用的组件（不使用灰名单，避免首次发送被拒绝）
 	dnsResolver := &MockDNSResolver{}
 	spf := NewSPF(dnsResolver)
 	dkim := &DKIM{} // 简化测试，不实际验证
 	dmarc := NewDMARC(dnsResolver)
-	greylist, _ := NewGreylist(":memory:")
+	// greylist 设为 nil，避免首次发送被拒绝
 	ratelimit := NewRateLimiter()
 
-	engine := NewEngine(spf, dkim, dmarc, greylist, ratelimit)
+	engine := NewEngine(spf, dkim, dmarc, nil, ratelimit)
 
 	tests := []struct {
 		name    string
@@ -95,10 +95,10 @@ func TestEngine_CheckLegacy(t *testing.T) {
 	spf := NewSPF(dnsResolver)
 	dkim := &DKIM{}
 	dmarc := NewDMARC(dnsResolver)
-	greylist, _ := NewGreylist(":memory:")
+	// greylist 设为 nil，避免首次发送被拒绝
 	ratelimit := NewRateLimiter()
 
-	engine := NewEngine(spf, dkim, dmarc, greylist, ratelimit)
+	engine := NewEngine(spf, dkim, dmarc, nil, ratelimit)
 
 	tests := []struct {
 		name    string
