@@ -8,12 +8,16 @@
 ## [Unreleased]
 
 ### 新增
+- WebMail 首次访问自动初始化功能（自动创建 admin 账户，页面显示密码）
 - WebMail 邮件搜索功能（按主题、发件人、收件人）
 - WebMail 文件夹动态列表功能
 - WebMail 草稿保存和更新功能
 - WebMail 邮件标记功能（已读/未读）
 - WebMail 回复和转发功能
 - WebMail 自动标记已读功能
+- WebMail 邮件体读取和显示（支持 HTML 和纯文本）
+- WebMail 邮件列表分页功能
+- WebMail 批量操作（批量删除、批量标记为已读）
 
 ### 改进
 - 改进 WebMail UI（搜索框、文件夹导航、操作按钮）

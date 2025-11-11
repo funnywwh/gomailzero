@@ -11,7 +11,7 @@
 - ✅ **存储加密** - 邮件体使用 XChaCha20-Poly1305 加密，密钥从用户密码派生
 - ✅ **反垃圾邮件** - SPF/DKIM/DMARC 检查，灰名单，速率限制
 - ✅ **双因子认证** - 支持 TOTP 和 WebAuthn（基础实现）
-- ✅ **WebMail** - 现代化的 Web 邮件界面（Vue3 + Vite）
+- ✅ **WebMail** - 现代化的 Web 邮件界面（Vue3 + Vite），首次访问自动创建 admin 账户
 - ✅ **管理 API** - RESTful API，支持 JWT 和 API Key 认证
 - ✅ **监控指标** - Prometheus 指标导出
 
@@ -176,8 +176,8 @@ sudo ./scripts/upgrade.sh v0.9.1 ./bin/gmz
 - TOTP 双因子认证基础实现
 - JWT 认证系统
 - 管理 API 基础功能（域名、用户、别名、配额管理）
-- WebMail 后端完整实现（登录、邮件列表、发送、删除、搜索、文件夹、草稿）
-- WebMail 前端完整功能（邮件列表、查看、编写、搜索、文件夹导航、回复、转发、标记）
+- WebMail 后端完整实现（登录、邮件列表、发送、删除、搜索、文件夹、草稿、初始化）
+- WebMail 前端完整功能（邮件列表、查看、编写、搜索、文件夹导航、回复、转发、标记、首次初始化）
 - Prometheus 指标导出
 - CI/CD 配置（测试、构建、安全扫描）
 - 安全扫描和修复（gosec、golangci-lint）
