@@ -17,6 +17,7 @@ import (
 	"github.com/gomailzero/gmz/internal/imapd"
 	"github.com/gomailzero/gmz/internal/logger"
 	"github.com/gomailzero/gmz/internal/metrics"
+	"github.com/gomailzero/gmz/internal/migrate"
 	"github.com/gomailzero/gmz/internal/smtpd"
 	"github.com/gomailzero/gmz/internal/storage"
 	"github.com/gomailzero/gmz/internal/web"
