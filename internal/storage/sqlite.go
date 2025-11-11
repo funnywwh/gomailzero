@@ -540,6 +540,18 @@ func (d *SQLiteDriver) GetMail(ctx context.Context, id string) (*Mail, error) {
 	return &mail, nil
 }
 
+// GetMailBody 获取邮件体（从 Maildir 读取）
+// 注意：SQLite 驱动不直接存储邮件体，需要从 Maildir 读取
+// 这个方法需要 Maildir 实例，但当前架构中 Maildir 是独立的
+// 暂时返回错误，实际应该通过组合或依赖注入的方式访问 Maildir
+func (d *SQLiteDriver) GetMailBody(ctx context.Context, userEmail string, folder string, mailID string) ([]byte, error) {
+	// TODO: 需要 Maildir 实例来读取邮件体
+	// 当前实现返回错误，实际应该：
+	// 1. 通过依赖注入获取 Maildir 实例
+	// 2. 或者将 Maildir 作为 SQLiteDriver 的字段
+	return nil, fmt.Errorf("GetMailBody 需要 Maildir 实例，当前未实现")
+}
+
 // ListMails 列出邮件
 func (d *SQLiteDriver) ListMails(ctx context.Context, userEmail string, folder string, limit, offset int) ([]*Mail, error) {
 	query := `

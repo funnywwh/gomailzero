@@ -209,6 +209,26 @@ onMounted(() => {
   color: #333;
 }
 
+.mail-body-html {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.mail-body-html :deep(img) {
+  max-width: 100%;
+  height: auto;
+}
+
+.mail-body-text {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.mail-body-empty {
+  color: #999;
+  font-style: italic;
+}
+
 .loading,
 .error {
   padding: 2rem;

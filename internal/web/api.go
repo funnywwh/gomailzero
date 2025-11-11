@@ -125,7 +125,7 @@ func listMailsHandler(driver storage.Driver) gin.HandlerFunc {
 }
 
 // getMailHandler 获取邮件
-func getMailHandler(driver storage.Driver) gin.HandlerFunc {
+func getMailHandler(driver storage.Driver, maildir *storage.Maildir) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
 		ctx := c.Request.Context()
@@ -147,7 +147,71 @@ func getMailHandler(driver storage.Driver) gin.HandlerFunc {
 			return
 		}
 
-		c.JSON(http.StatusOK, mail)
+		// 读取邮件体（从 Maildir）
+		bodyText := ""
+		bodyHTML := ""
+		if maildir != nil {
+			// 邮件 ID 就是 Maildir 中的文件名
+			body, err := maildir.ReadMail(mail.UserEmail, mail.Folder, id)
+			if err == nil {
+				// 解析邮件体（简单实现：查找 text/plain 和 text/html 部分）
+				bodyStr := string(body)
+				
+				// 检查是否是 MIME 格式
+				if strings.Contains(bodyStr, "Content-Type:") {
+					// 简单的 MIME 解析
+					// 查找 text/plain 部分
+					if idx := strings.Index(bodyStr, "Content-Type: text/plain"); idx >= 0 {
+						// 找到正文开始位置
+						bodyStart := strings.Index(bodyStr[idx:], "\r\n\r\n")
+						if bodyStart >= 0 {
+							plainText := bodyStr[idx+bodyStart+4:]
+							// 移除后续的 MIME 部分
+							if nextBoundary := strings.Index(plainText, "\r\n--"); nextBoundary >= 0 {
+								plainText = plainText[:nextBoundary]
+							}
+							bodyText = strings.TrimSpace(plainText)
+						}
+					}
+					
+					// 查找 text/html 部分
+					if idx := strings.Index(bodyStr, "Content-Type: text/html"); idx >= 0 {
+						bodyStart := strings.Index(bodyStr[idx:], "\r\n\r\n")
+						if bodyStart >= 0 {
+							htmlText := bodyStr[idx+bodyStart+4:]
+							if nextBoundary := strings.Index(htmlText, "\r\n--"); nextBoundary >= 0 {
+								htmlText = htmlText[:nextBoundary]
+							}
+							bodyHTML = strings.TrimSpace(htmlText)
+						}
+					}
+				} else {
+					// 纯文本邮件
+					bodyText = bodyStr
+				}
+			}
+			// 如果读取失败，忽略错误（可能邮件体不存在）
+		}
+
+		// 构建响应
+		response := gin.H{
+			"id":          mail.ID,
+			"user_email":  mail.UserEmail,
+			"folder":      mail.Folder,
+			"from":        mail.From,
+			"to":          mail.To,
+			"cc":          mail.Cc,
+			"bcc":         mail.Bcc,
+			"subject":     mail.Subject,
+			"body":        bodyText,  // 纯文本正文
+			"body_html":   bodyHTML, // HTML 正文
+			"size":        mail.Size,
+			"flags":       mail.Flags,
+			"received_at": mail.ReceivedAt,
+			"created_at":  mail.CreatedAt,
+		}
+
+		c.JSON(http.StatusOK, response)
 	}
 }
 

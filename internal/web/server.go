@@ -30,6 +30,7 @@ type Config struct {
 	Path        string
 	Port        int
 	Storage     storage.Driver
+	Maildir     *storage.Maildir // Maildir 实例，用于读取邮件体
 	JWTSecret   string
 	JWTIssuer   string
 	TOTPManager *auth.TOTPManager
@@ -60,7 +61,7 @@ func NewServer(cfg *Config) *Server {
 		{
 			api.GET("/mails", listMailsHandler(cfg.Storage))
 			api.GET("/mails/search", searchMailsHandler(cfg.Storage))
-			api.GET("/mails/:id", getMailHandler(cfg.Storage))
+			api.GET("/mails/:id", getMailHandler(cfg.Storage, cfg.Maildir))
 			api.POST("/mails", sendMailHandler(cfg.Storage))
 			api.POST("/mails/drafts", saveDraftHandler(cfg.Storage))
 			api.DELETE("/mails/:id", deleteMailHandler(cfg.Storage))

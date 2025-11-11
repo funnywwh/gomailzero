@@ -218,6 +218,7 @@ func main() {
 			Path:        cfg.WebMail.Path,
 			Port:        cfg.WebMail.Port,
 			Storage:     storageDriver,
+			Maildir:     maildir,
 			JWTSecret:   jwtSecret,
 			JWTIssuer:   cfg.Domain,
 			TOTPManager: totpManager,

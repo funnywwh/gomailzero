@@ -30,6 +30,7 @@ type Driver interface {
 	// 邮件管理
 	StoreMail(ctx context.Context, mail *Mail) error
 	GetMail(ctx context.Context, id string) (*Mail, error)
+	GetMailBody(ctx context.Context, userEmail string, folder string, mailID string) ([]byte, error)
 	ListMails(ctx context.Context, userEmail string, folder string, limit, offset int) ([]*Mail, error)
 	DeleteMail(ctx context.Context, id string) error
 	UpdateMailFlags(ctx context.Context, id string, flags []string) error
