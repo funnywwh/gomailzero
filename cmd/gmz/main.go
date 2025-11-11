@@ -206,17 +206,21 @@ func main() {
 	// 启动 WebMail 服务器
 	if cfg.WebMail.Enabled {
 		// 生成 JWT 密钥（如果未配置，使用默认值）
-		jwtSecret := cfg.Admin.APIKey
+		jwtSecret := cfg.Admin.JWTSecret
 		if jwtSecret == "" {
 			jwtSecret = "change-me-in-production"
 		}
 
+		// 创建 TOTP 管理器
+		totpManager := auth.NewTOTPManager(storageDriver)
+
 		webServer := web.NewServer(&web.Config{
-			Path:      cfg.WebMail.Path,
-			Port:      cfg.WebMail.Port,
-			Storage:   storageDriver,
-			JWTSecret: jwtSecret,
-			JWTIssuer: cfg.Domain,
+			Path:        cfg.WebMail.Path,
+			Port:        cfg.WebMail.Port,
+			Storage:     storageDriver,
+			JWTSecret:   jwtSecret,
+			JWTIssuer:   cfg.Domain,
+			TOTPManager: totpManager,
 		})
 
 		go func() {

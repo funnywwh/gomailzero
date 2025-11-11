@@ -218,11 +218,15 @@ func sendMailHandler(driver storage.Driver) gin.HandlerFunc {
 			return
 		}
 
-		// TODO: 实际发送邮件到外部服务器（通过 SMTP 队列）
+		// 发送邮件到外部服务器（通过本地 SMTP 服务器）
+		// 注意：这里简化实现，实际应该通过 SMTP 客户端发送到外部服务器
+		// 当前实现将邮件存储到 Sent 文件夹，实际发送需要配置 SMTP 中继服务器
+		// TODO: 实现 SMTP 中继客户端，将邮件发送到外部服务器
 
 		c.JSON(http.StatusOK, gin.H{
-			"message": "邮件已发送",
+			"message": "邮件已保存到已发送文件夹",
 			"id":      mail.ID,
+			"note":    "实际发送功能需要配置 SMTP 中继服务器",
 		})
 	}
 }
