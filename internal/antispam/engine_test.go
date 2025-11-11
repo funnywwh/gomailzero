@@ -12,7 +12,7 @@ func TestEngine_Check(t *testing.T) {
 	spf := NewSPF(dnsResolver)
 	dkim := &DKIM{} // 简化测试，不实际验证
 	dmarc := NewDMARC(dnsResolver)
-	greylist := NewGreylist(":memory:")
+	greylist, _ := NewGreylist(":memory:")
 	ratelimit := NewRateLimiter()
 
 	engine := NewEngine(spf, dkim, dmarc, greylist, ratelimit)
@@ -95,7 +95,7 @@ func TestEngine_CheckLegacy(t *testing.T) {
 	spf := NewSPF(dnsResolver)
 	dkim := &DKIM{}
 	dmarc := NewDMARC(dnsResolver)
-	greylist := NewGreylist(":memory:")
+	greylist, _ := NewGreylist(":memory:")
 	ratelimit := NewRateLimiter()
 
 	engine := NewEngine(spf, dkim, dmarc, greylist, ratelimit)
