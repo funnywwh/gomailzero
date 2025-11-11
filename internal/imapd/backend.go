@@ -153,7 +153,10 @@ func (m *Mailbox) Status(items []imap.StatusItem) (*imap.MailboxStatus, error) {
 	for _, item := range items {
 		switch item {
 		case imap.StatusMessages:
-			status.Messages = uint32(len(m.mails))
+			// #nosec G115 -- len() 返回的 int 在合理范围内，不会溢出 uint32
+			if len(m.mails) > 0 && len(m.mails) <= int(^uint32(0)) {
+				status.Messages = uint32(len(m.mails))
+			}
 		case imap.StatusRecent:
 			// TODO: 计算未读邮件数
 			status.Recent = 0
@@ -162,7 +165,10 @@ func (m *Mailbox) Status(items []imap.StatusItem) (*imap.MailboxStatus, error) {
 			status.Unseen = 0
 		case imap.StatusUidNext:
 			// TODO: 计算下一个 UID
-			status.UidNext = uint32(len(m.mails) + 1)
+			// #nosec G115 -- len() 返回的 int 在合理范围内，不会溢出 uint32
+			if len(m.mails)+1 > 0 && len(m.mails)+1 <= int(^uint32(0)) {
+				status.UidNext = uint32(len(m.mails) + 1)
+			}
 		case imap.StatusUidValidity:
 			status.UidValidity = 1
 		}
@@ -188,6 +194,7 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 	defer close(ch)
 
 	for i, mail := range m.mails {
+		// #nosec G115 -- 循环索引 i 在合理范围内，不会溢出 uint32
 		seqNum := uint32(i + 1)
 		if uid {
 			seqNum = uint32(i + 1) // TODO: 使用实际的 UID
@@ -234,6 +241,7 @@ func (m *Mailbox) SearchMessages(uid bool, criteria *imap.SearchCriteria) ([]uin
 	var results []uint32
 
 	for i, mail := range m.mails {
+		// #nosec G115 -- 循环索引 i 在合理范围内，不会溢出 uint32
 		seqNum := uint32(i + 1)
 		matched := true
 
@@ -366,6 +374,7 @@ func (m *Mailbox) UpdateMessagesFlags(uid bool, seqSet *imap.SeqSet, op imap.Fla
 
 	// 遍历序列集
 	for i, mail := range m.mails {
+		// #nosec G115 -- 循环索引 i 在合理范围内，不会溢出 uint32
 		seqNum := uint32(i + 1)
 		if seqSet != nil && !seqSet.Contains(seqNum) {
 			continue
@@ -429,6 +438,7 @@ func (m *Mailbox) CopyMessages(uid bool, seqSet *imap.SeqSet, dest string) error
 
 	// 复制选中的邮件
 	for i, mail := range m.mails {
+		// #nosec G115 -- 循环索引 i 在合理范围内，不会溢出 uint32
 		seqNum := uint32(i + 1)
 		if seqSet != nil && !seqSet.Contains(seqNum) {
 			continue

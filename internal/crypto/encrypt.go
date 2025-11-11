@@ -23,13 +23,14 @@ func Encrypt(key []byte, plaintext []byte) ([]byte, error) {
 		return nil, fmt.Errorf("创建 AEAD 失败: %w", err)
 	}
 
-	// 生成随机 nonce
+	// 生成随机 nonce（使用加密安全的随机数生成器）
 	nonce := make([]byte, nonceSize)
 	if _, err := rand.Read(nonce); err != nil {
 		return nil, fmt.Errorf("生成 nonce 失败: %w", err)
 	}
 
-	// 加密
+	// 加密（nonce 是随机生成的，不是硬编码）
+	// #nosec G407 -- nonce 是通过 crypto/rand 随机生成的，不是硬编码
 	ciphertext := aead.Seal(nonce, nonce, plaintext, nil)
 	return ciphertext, nil
 }

@@ -19,7 +19,9 @@ func Init(cfg LogConfig) {
 	if cfg.Output == "stdout" || cfg.Output == "" {
 		writers = append(writers, os.Stdout)
 	} else {
-		file, err := os.OpenFile(cfg.Output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		// #nosec G302 -- 日志文件需要组可读权限，0600 可能过于严格
+		// 在生产环境中，建议使用 0640 或通过文件系统 ACL 控制访问
+		file, err := os.OpenFile(cfg.Output, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0640)
 		if err != nil {
 			log.Fatal().Err(err).Msg("无法打开日志文件")
 		}

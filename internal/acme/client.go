@@ -55,6 +55,7 @@ func NewClient(cfg *config.ACMEConfig) (*Client, error) {
 	}
 
 	// 确保证书目录存在
+	// #nosec G301 -- 0755 权限允许组和其他用户读取证书，这是 ACME 证书的标准权限
 	if err := os.MkdirAll(cfg.Dir, 0755); err != nil {
 		return nil, fmt.Errorf("创建证书目录失败: %w", err)
 	}
@@ -243,6 +244,7 @@ func (c *Client) saveCertificate(domain string, cert []byte, key []byte) error {
 	certFile := filepath.Join(c.config.Dir, domain+".crt")
 	keyFile := filepath.Join(c.config.Dir, domain+".key")
 
+	// #nosec G306 -- 证书文件需要可读权限，0644 是标准权限
 	if err := os.WriteFile(certFile, cert, 0644); err != nil {
 		return fmt.Errorf("保存证书文件失败: %w", err)
 	}

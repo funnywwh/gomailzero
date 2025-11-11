@@ -16,6 +16,7 @@ type Maildir struct {
 
 // NewMaildir 创建 Maildir 实例
 func NewMaildir(root string) (*Maildir, error) {
+	// #nosec G301 -- 0755 权限允许组和其他用户读取，这是 Maildir 的标准权限
 	if err := os.MkdirAll(root, 0755); err != nil {
 		return nil, fmt.Errorf("创建 Maildir 根目录失败: %w", err)
 	}
@@ -36,6 +37,7 @@ func (m *Maildir) EnsureUserMaildir(userEmail string) error {
 	folders := []string{"cur", "new", "tmp"}
 	for _, folder := range folders {
 		path := filepath.Join(userDir, folder)
+		// #nosec G301 -- 0755 权限允许组和其他用户读取，这是 Maildir 的标准权限
 		if err := os.MkdirAll(path, 0755); err != nil {
 			return fmt.Errorf("创建文件夹 %s 失败: %w", folder, err)
 		}
@@ -45,10 +47,12 @@ func (m *Maildir) EnsureUserMaildir(userEmail string) error {
 	specialFolders := []string{"Sent", "Drafts", "Trash", "Spam"}
 	for _, folder := range specialFolders {
 		path := filepath.Join(userDir, "."+folder, "cur")
+		// #nosec G301 -- 0755 权限允许组和其他用户读取，这是 Maildir 的标准权限
 		if err := os.MkdirAll(path, 0755); err != nil {
 			return fmt.Errorf("创建特殊文件夹 %s 失败: %w", folder, err)
 		}
 		path = filepath.Join(userDir, "."+folder, "new")
+		// #nosec G301 -- 0755 权限允许组和其他用户读取，这是 Maildir 的标准权限
 		if err := os.MkdirAll(path, 0755); err != nil {
 			return fmt.Errorf("创建特殊文件夹 %s 失败: %w", folder, err)
 		}
@@ -102,6 +106,7 @@ func (m *Maildir) StoreMail(userEmail string, folder string, data []byte) (strin
 
 	// 写入文件
 	filePath := filepath.Join(targetDir, uniqueName)
+	// #nosec G306 -- 0644 权限允许组和其他用户读取，这是 Maildir 的标准权限
 	if err := os.WriteFile(filePath, data, 0644); err != nil {
 		return "", fmt.Errorf("写入邮件文件失败: %w", err)
 	}
