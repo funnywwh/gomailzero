@@ -73,21 +73,33 @@ systemctl start gmz
 - 配置管理系统（支持热更新）
 - SQLite 存储驱动（支持 WAL 模式）
 - Maildir++ 邮件存储
-- SMTP 服务器基础功能
-- IMAP 服务器基础功能
+- SMTP 服务器基础功能（支持 AUTH、STARTTLS）
+- IMAP 服务器基础功能（支持登录、邮箱管理、邮件操作）
 - TLS 配置和加载
 - 邮件加密（XChaCha20-Poly1305）
 - 密码哈希（Argon2id）
 - 结构化日志系统
+- ACME 客户端基础实现
+- DKIM/SPF/DMARC 基础实现
+- 反垃圾邮件引擎（评分系统、规则链、灰名单、速率限制）
+- TOTP 双因子认证基础实现
+- JWT 认证系统
+- 管理 API 基础功能（域名、用户、别名、配额管理）
+- WebMail 后端基础实现（登录、邮件列表、发送、删除）
+- Prometheus 指标导出
+- CI/CD 配置（测试、构建、安全扫描）
+- 安全扫描和修复（gosec、golangci-lint）
 
 ### 开发中 🚧
 
-- ACME 自动证书管理
-- DKIM/SPF/DMARC 验证
-- 反垃圾邮件引擎
-- WebMail 前端
-- 管理 API
-- Prometheus 指标导出
+- ACME 证书自动续期和热重载
+- DKIM/SPF/DMARC 完整验证流程
+- ClamAV 病毒扫描集成
+- WebMail 前端（Vue3）
+- WebAuthn 支持
+- 数据库迁移系统
+- 集成测试完善
+- OpenAPI 文档生成
 
 ## 开发
 
@@ -180,10 +192,10 @@ MIT License
 
 ## 路线图
 
-- [x] v0.1.0 - 基础框架和 SMTP/IMAP 服务器
-- [ ] v0.2.0 - ACME 证书管理和 TLS 支持
-- [ ] v0.3.0 - DKIM/SPF/DMARC 验证
-- [ ] v0.4.0 - 反垃圾邮件引擎
-- [ ] v0.5.0 - WebMail 前端
-- [ ] v0.6.0 - 管理 API 和监控
-- [ ] v0.9.0 - 完整功能发布
+- [x] v0.1.0 - 基础框架和 SMTP/IMAP 服务器 ✅
+- [x] v0.2.0 - ACME 证书管理和 TLS 支持 ✅ (基础实现)
+- [x] v0.3.0 - DKIM/SPF/DMARC 验证 ✅ (基础实现)
+- [x] v0.4.0 - 反垃圾邮件引擎 ✅ (基础实现)
+- [ ] v0.5.0 - WebMail 前端 🚧 (后端完成，前端开发中)
+- [x] v0.6.0 - 管理 API 和监控 ✅ (基础实现)
+- [ ] v0.9.0 - 完整功能发布 🚧 (约 70% 完成)
