@@ -84,18 +84,28 @@ func main() {
 		}
 		defer storageDriver.Close()
 
-		// 执行数据库迁移（如果启用）
+		// 执行数据库迁移或初始化
+		sqliteDriver := storageDriver.(*storage.SQLiteDriver)
 		if cfg.Storage.AutoMigrate {
+			// 使用 goose 迁移
 			migrationsDir, err := migrate.GetMigrationsDir()
 			if err != nil {
-				log.Warn().Err(err).Msg("找不到迁移目录，跳过自动迁移")
+				log.Warn().Err(err).Msg("找不到迁移目录，使用 initSchema 初始化")
+				if err := sqliteDriver.RunMigrations(ctx, "", false); err != nil {
+					log.Fatal().Err(err).Msg("数据库初始化失败")
+				}
 			} else {
-				sqliteDriver := storageDriver.(*storage.SQLiteDriver)
 				if err := sqliteDriver.RunMigrations(ctx, migrationsDir, true); err != nil {
 					log.Fatal().Err(err).Msg("数据库迁移失败")
 				}
 				log.Info().Msg("数据库迁移完成")
 			}
+		} else {
+			// 使用 initSchema 初始化（向后兼容）
+			if err := sqliteDriver.RunMigrations(ctx, "", false); err != nil {
+				log.Fatal().Err(err).Msg("数据库初始化失败")
+			}
+			log.Info().Msg("数据库初始化完成")
 		}
 	} else {
 		log.Fatal().Str("driver", cfg.Storage.Driver).Msg("不支持的存储驱动")
@@ -171,6 +181,7 @@ func main() {
 		apiServer := api.NewServer(&api.Config{
 			Port:       cfg.Admin.Port,
 			APIKey:     cfg.Admin.APIKey,
+			Domain:     cfg.Domain,
 			Storage:    storageDriver,
 			JWTManager: jwtManager,
 			TOTPManager: totpManager,
@@ -223,6 +234,7 @@ func main() {
 			JWTSecret:   jwtSecret,
 			JWTIssuer:   cfg.Domain,
 			TOTPManager: totpManager,
+			AdminPort:   cfg.Admin.Port, // 管理 API 端口，用于代理管理界面
 		})
 
 		go func() {

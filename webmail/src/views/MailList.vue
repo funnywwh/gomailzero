@@ -56,7 +56,7 @@
                 @click.stop="toggleSelect(mail.id, $event)"
                 class="mail-checkbox"
               />
-              <div class="mail-from">{{ mail.from }}</div>
+              <div class="mail-from">{{ getDisplayAddress(mail) }}</div>
               <div class="mail-subject">{{ mail.subject || '(无主题)' }}</div>
               <div class="mail-date">{{ formatDate(mail.received_at) }}</div>
             </li>
@@ -244,6 +244,20 @@ const getFolderName = (folder: string) => {
     Spam: '垃圾邮件'
   }
   return names[folder] || folder
+}
+
+// 获取显示地址（Sent 文件夹显示收件人，其他文件夹显示发件人）
+const getDisplayAddress = (mail: any) => {
+  if (currentFolder.value === 'Sent') {
+    // 已发送文件夹显示收件人
+    if (mail.to && mail.to.length > 0) {
+      return mail.to.join(', ')
+    }
+    return '(无收件人)'
+  } else {
+    // 其他文件夹显示发件人
+    return mail.from || '(无发件人)'
+  }
 }
 
 onMounted(() => {

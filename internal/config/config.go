@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
@@ -12,6 +13,7 @@ import (
 type Config struct {
 	NodeID   string         `yaml:"node_id" mapstructure:"node_id"`
 	Domain   string         `yaml:"domain" mapstructure:"domain"`
+	WorkDir  string         `yaml:"workdir" mapstructure:"workdir"` // 工作目录，所有相对路径基于此目录
 	TLS      TLSConfig      `yaml:"tls" mapstructure:"tls"`
 	Storage  StorageConfig  `yaml:"storage" mapstructure:"storage"`
 	SMTP     SMTPConfig     `yaml:"smtp" mapstructure:"smtp"`
@@ -128,6 +130,11 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("解析配置失败: %w", err)
 	}
 
+	// 解析工作目录和相对路径
+	if err := resolvePaths(&cfg); err != nil {
+		return nil, fmt.Errorf("解析路径失败: %w", err)
+	}
+
 	// 验证配置
 	if err := validate(&cfg); err != nil {
 		return nil, fmt.Errorf("配置验证失败: %w", err)
@@ -136,11 +143,63 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// resolvePaths 解析工作目录和相对路径
+func resolvePaths(cfg *Config) error {
+	// 如果没有指定工作目录，使用当前工作目录
+	if cfg.WorkDir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("获取当前工作目录失败: %w", err)
+		}
+		cfg.WorkDir = wd
+	}
+
+	// 将工作目录转换为绝对路径
+	workDir, err := filepath.Abs(cfg.WorkDir)
+	if err != nil {
+		return fmt.Errorf("解析工作目录失败: %w", err)
+	}
+	cfg.WorkDir = workDir
+
+	// 解析相对路径为绝对路径（基于工作目录）
+	resolvePath := func(path string) string {
+		if path == "" {
+			return path
+		}
+		// 如果已经是绝对路径，直接返回
+		if filepath.IsAbs(path) {
+			return path
+		}
+		// 相对路径基于工作目录解析
+		return filepath.Join(workDir, path)
+	}
+
+	// 解析存储相关路径
+	if cfg.Storage.DSN != "" && !filepath.IsAbs(cfg.Storage.DSN) && cfg.Storage.Driver == "sqlite" {
+		// SQLite DSN 如果是相对路径，基于工作目录解析
+		cfg.Storage.DSN = resolvePath(cfg.Storage.DSN)
+	}
+	cfg.Storage.MaildirRoot = resolvePath(cfg.Storage.MaildirRoot)
+
+	// 解析 TLS 相关路径
+	cfg.TLS.CertFile = resolvePath(cfg.TLS.CertFile)
+	cfg.TLS.KeyFile = resolvePath(cfg.TLS.KeyFile)
+	cfg.TLS.ACME.Dir = resolvePath(cfg.TLS.ACME.Dir)
+
+	// 解析日志输出路径（如果不是 stdout）
+	if cfg.Log.Output != "" && cfg.Log.Output != "stdout" && cfg.Log.Output != "stderr" {
+		cfg.Log.Output = resolvePath(cfg.Log.Output)
+	}
+
+	return nil
+}
+
 // setDefaults 设置默认值
 func setDefaults(v *viper.Viper) {
 	// 基础配置
 	v.SetDefault("node_id", "mx1")
 	v.SetDefault("domain", "example.com")
+	v.SetDefault("workdir", "") // 默认使用当前工作目录
 
 	// TLS 配置
 	v.SetDefault("tls.enabled", true)

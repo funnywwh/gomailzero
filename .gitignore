@@ -69,3 +69,8 @@ certs/
 *.bak
 *.old
 
+data/
+internal/api/static/
+.gitignore
+node_modules
+internal/web/static/

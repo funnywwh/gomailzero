@@ -167,17 +167,53 @@ func (m *Maildir) MoveToCur(userEmail string, folder string, filename string, fl
 func (m *Maildir) ReadMail(userEmail string, folder string, filename string) ([]byte, error) {
 	userDir := m.GetUserMaildir(userEmail)
 
-	// 尝试从 cur 读取
-	var filePath string
+	// 确定文件夹路径
+	var folderDir string
 	if folder == "INBOX" || folder == "" {
-		filePath = filepath.Join(userDir, "cur", filename)
-		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			filePath = filepath.Join(userDir, "new", filename)
-		}
+		folderDir = userDir
 	} else {
-		filePath = filepath.Join(userDir, "."+folder, "cur", filename)
+		folderDir = filepath.Join(userDir, "."+folder)
+	}
+
+	// 尝试从 cur 读取（文件名可能包含标志后缀，如 :2,S）
+	curDir := filepath.Join(folderDir, "cur")
+	var filePath string
+	
+	// 先尝试直接匹配文件名
+	filePath = filepath.Join(curDir, filename)
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// 如果直接匹配失败，尝试查找包含该文件名前缀的文件（处理标志后缀）
+		entries, err := os.ReadDir(curDir)
+		if err == nil {
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					// 检查文件名是否以 filename 开头（忽略标志后缀）
+					if strings.HasPrefix(entry.Name(), filename) {
+						filePath = filepath.Join(curDir, entry.Name())
+						break
+					}
+				}
+			}
+		}
+		
+		// 如果 cur 中找不到，尝试从 new 读取
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
-			filePath = filepath.Join(userDir, "."+folder, "new", filename)
+			newDir := filepath.Join(folderDir, "new")
+			filePath = filepath.Join(newDir, filename)
+			if _, err := os.Stat(filePath); os.IsNotExist(err) {
+				// 尝试在 new 中查找包含该文件名前缀的文件
+				entries, err := os.ReadDir(newDir)
+				if err == nil {
+					for _, entry := range entries {
+						if !entry.IsDir() {
+							if strings.HasPrefix(entry.Name(), filename) {
+								filePath = filepath.Join(newDir, entry.Name())
+								break
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 

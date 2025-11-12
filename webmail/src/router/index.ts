@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Login from '../views/Login.vue'
-import Init from '../views/Init.vue'
 import MailList from '../views/MailList.vue'
 import MailView from '../views/MailView.vue'
 import Compose from '../views/Compose.vue'
@@ -11,11 +10,6 @@ const router = createRouter({
     {
       path: '/',
       redirect: '/login'
-    },
-    {
-      path: '/init',
-      name: 'Init',
-      component: Init
     },
     {
       path: '/login',
@@ -46,11 +40,14 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
+  
+  // 检查认证要求
   if (to.meta.requiresAuth && !token) {
     next('/login')
-  } else {
-    next()
+    return
   }
+  
+  next()
 })
 
 export default router

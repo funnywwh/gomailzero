@@ -4,7 +4,11 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"io/fs"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -35,6 +39,7 @@ type Config struct {
 	JWTSecret   string
 	JWTIssuer   string
 	TOTPManager *auth.TOTPManager
+	AdminPort   int // 管理 API 端口，用于代理管理界面
 }
 
 // NewServer 创建 WebMail 服务器
@@ -47,6 +52,32 @@ func NewServer(cfg *Config) *Server {
 
 	// 静态文件服务
 	router.StaticFS("/static", http.FS(staticFiles))
+	// 支持 /assets 路径（前端资源），映射到 static/assets
+	assetsFS, err := fs.Sub(staticFiles, "static/assets")
+	if err == nil {
+		router.StaticFS("/assets", http.FS(assetsFS))
+	}
+
+	// 管理界面代理（代理到管理 API 服务器）
+	if cfg.AdminPort > 0 {
+		adminURL, err := url.Parse(fmt.Sprintf("http://localhost:%d", cfg.AdminPort))
+		if err == nil {
+			proxy := httputil.NewSingleHostReverseProxy(adminURL)
+			// 代理管理界面静态资源
+			router.Any("/admin", func(c *gin.Context) {
+				proxy.ServeHTTP(c.Writer, c.Request)
+			})
+			router.Any("/admin/*path", func(c *gin.Context) {
+				proxy.ServeHTTP(c.Writer, c.Request)
+			})
+			// 代理管理 API 请求（/api/v1/*）
+			// 使用 NoRoute 或者更精确的路由匹配
+			apiV1Group := router.Group("/api/v1")
+			apiV1Group.Any("/*path", func(c *gin.Context) {
+				proxy.ServeHTTP(c.Writer, c.Request)
+			})
+		}
+	}
 
 	// 创建 JWT 管理器
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTIssuer)
@@ -60,12 +91,12 @@ func NewServer(cfg *Config) *Server {
 		api.POST("/login", loginHandler(cfg.Storage, jwtManager, cfg.TOTPManager))
 		
 		// 需要认证的端点
-		api.Use(jwtMiddleware(jwtManager))
+		api.Use(jwtMiddleware(jwtManager, cfg.Storage))
 		{
 			api.GET("/mails", listMailsHandler(cfg.Storage))
 			api.GET("/mails/search", searchMailsHandler(cfg.Storage))
 			api.GET("/mails/:id", getMailHandler(cfg.Storage, cfg.Maildir))
-			api.POST("/mails", sendMailHandler(cfg.Storage))
+			api.POST("/mails", sendMailHandler(cfg.Storage, cfg.Maildir))
 			api.POST("/mails/drafts", saveDraftHandler(cfg.Storage))
 			api.DELETE("/mails/:id", deleteMailHandler(cfg.Storage))
 			api.PUT("/mails/:id/flags", updateMailFlagsHandler(cfg.Storage))
@@ -73,10 +104,31 @@ func NewServer(cfg *Config) *Server {
 		}
 	}
 
+	// 根路径返回 index.html
+	router.GET("/", func(c *gin.Context) {
+		data, err := staticFiles.ReadFile("static/index.html")
+		if err != nil {
+			c.String(http.StatusInternalServerError, "无法加载页面")
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", data)
+	})
+	
 	// SPA 路由（所有其他路由返回 index.html）
 	router.NoRoute(func(c *gin.Context) {
+		// 排除 API 和静态资源路径
+		path := c.Request.URL.Path
+		if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/static") || strings.HasPrefix(path, "/assets") {
+			c.Status(http.StatusNotFound)
+			return
+		}
 		// 返回 index.html
-		c.FileFromFS("static/index.html", http.FS(staticFiles))
+		data, err := staticFiles.ReadFile("static/index.html")
+		if err != nil {
+			c.String(http.StatusInternalServerError, "无法加载页面")
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", data)
 	})
 
 	return &Server{
@@ -135,12 +187,31 @@ func loggerMiddleware() gin.HandlerFunc {
 		latency := time.Since(start)
 		status := c.Writer.Status()
 
-		logger.Info().
+		// 获取错误信息（如果有）
+		errs := c.Errors
+		var errMsg string
+		if len(errs) > 0 {
+			errMsg = errs.String()
+		}
+
+		logEntry := logger.Info().
 			Int("status", status).
 			Str("method", c.Request.Method).
 			Str("path", path).
 			Dur("latency", latency).
-			Str("ip", c.ClientIP()).
-			Msg("WebMail 请求")
+			Str("ip", c.ClientIP())
+
+		// 如果是错误状态，记录错误信息
+		if status >= 400 {
+			if errMsg != "" {
+				logEntry = logEntry.Str("error", errMsg)
+			}
+			// 记录请求参数（仅用于调试）
+			if c.Request.URL.RawQuery != "" {
+				logEntry = logEntry.Str("query", c.Request.URL.RawQuery)
+			}
+		}
+
+		logEntry.Msg("WebMail 请求")
 	}
 }

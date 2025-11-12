@@ -97,7 +97,7 @@ const handleInit = async () => {
 
       // 如果返回了 token，保存并准备自动登录
       if (response.token) {
-        localStorage.setItem('token', response.token)
+        localStorage.setItem('admin_token', response.token)
       }
     }
   } catch (err: any) {
@@ -126,7 +126,7 @@ const copyToClipboard = async (text: string) => {
 const handleLogin = () => {
   if (initResult.value.token) {
     // 已有 token，直接跳转
-    router.push('/mails')
+    router.push('/')
   } else {
     // 跳转到登录页面
     router.push('/login')

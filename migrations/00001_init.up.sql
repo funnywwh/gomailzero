@@ -1,3 +1,5 @@
+-- +goose Up
+-- +goose StatementBegin
 -- 初始数据库结构
 
 CREATE TABLE IF NOT EXISTS users (
@@ -53,4 +55,4 @@ CREATE INDEX IF NOT EXISTS idx_mails_user_folder ON mails(user_email, folder);
 CREATE INDEX IF NOT EXISTS idx_mails_received_at ON mails(received_at);
 CREATE INDEX IF NOT EXISTS idx_aliases_from ON aliases(from_addr);
 CREATE INDEX IF NOT EXISTS idx_aliases_domain ON aliases(domain);
-
+-- +goose StatementEnd

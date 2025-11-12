@@ -16,10 +16,16 @@ help: ## 显示帮助信息
 	@echo "可用目标:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
-build: ## 构建二进制文件
+build: build-frontend ## 构建二进制文件
 	@echo "构建 $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
 	$(GO_BUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/gmz
+
+build-frontend: ## 构建前端（WebMail 和管理界面）
+	@echo "构建 WebMail 前端..."
+	@cd webmail && npm install && npm run build
+	@echo "构建管理界面前端..."
+	@cd admin && npm install && npm run build
 
 build-linux-amd64: ## 构建 Linux x86_64 二进制
 	@echo "构建 Linux x86_64 $(BINARY_NAME)..."

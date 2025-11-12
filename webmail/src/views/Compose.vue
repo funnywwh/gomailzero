@@ -29,11 +29,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { api } from '../api'
 
 const router = useRouter()
+const route = useRoute()
 
 const form = ref({
   to: '',
@@ -96,7 +97,8 @@ onMounted(() => {
     api.getMail(replyId).then((mail) => {
       form.value.to = mail.from
       form.value.subject = (route.query.subject as string) || `Re: ${mail.subject || ''}`
-      form.value.body = `\n\n--- 原始邮件 ---\n发件人: ${mail.from}\n日期: ${new Date(mail.received_at).toLocaleString()}\n主题: ${mail.subject || ''}\n\n${mail.body ? new TextDecoder().decode(mail.body) : ''}`
+      const bodyText = mail.body || mail.body_html || ''
+      form.value.body = `\n\n--- 原始邮件 ---\n发件人: ${mail.from}\n日期: ${new Date(mail.received_at).toLocaleString()}\n主题: ${mail.subject || ''}\n\n${bodyText}`
     }).catch((err) => {
       console.error('加载邮件失败:', err)
     })
@@ -104,7 +106,8 @@ onMounted(() => {
     // 加载原邮件并设置转发内容
     api.getMail(forwardId).then((mail) => {
       form.value.subject = (route.query.subject as string) || `Fwd: ${mail.subject || ''}`
-      form.value.body = `\n\n--- 转发邮件 ---\n发件人: ${mail.from}\n日期: ${new Date(mail.received_at).toLocaleString()}\n主题: ${mail.subject || ''}\n收件人: ${mail.to?.join(', ') || ''}\n\n${mail.body || mail.body_html || ''}`
+      const bodyText = mail.body || mail.body_html || ''
+      form.value.body = `\n\n--- 转发邮件 ---\n发件人: ${mail.from}\n日期: ${new Date(mail.received_at).toLocaleString()}\n主题: ${mail.subject || ''}\n收件人: ${mail.to?.join(', ') || ''}\n\n${bodyText}`
     }).catch((err) => {
       console.error('加载邮件失败:', err)
     })
@@ -116,7 +119,8 @@ onMounted(() => {
 .compose-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  min-height: 100vh;
+  background: #f5f5f5;
 }
 
 .header {

@@ -13,7 +13,7 @@ require (
 	github.com/go-webauthn/webauthn v0.15.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/pquerna/otp v1.5.0
-	github.com/pressly/goose/v3 v3.26.0
+	github.com/pressly/goose/v3 v3.25.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/rs/zerolog v1.31.0
 	github.com/spf13/viper v1.18.2

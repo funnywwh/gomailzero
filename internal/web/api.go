@@ -112,10 +112,17 @@ func listMailsHandler(driver storage.Driver) gin.HandlerFunc {
 		ctx := c.Request.Context()
 		mails, err := driver.ListMails(ctx, email, folder, limit, offset)
 		if err != nil {
+			// 记录详细错误信息
+			c.Error(err)
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
 			return
+		}
+
+		// 确保返回空数组而不是 nil
+		if mails == nil {
+			mails = []*storage.Mail{}
 		}
 
 		c.JSON(http.StatusOK, gin.H{
@@ -216,7 +223,7 @@ func getMailHandler(driver storage.Driver, maildir *storage.Maildir) gin.Handler
 }
 
 // sendMailHandler 发送邮件
-func sendMailHandler(driver storage.Driver) gin.HandlerFunc {
+func sendMailHandler(driver storage.Driver, maildir *storage.Maildir) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 从 JWT 获取用户邮箱
 		userEmail, exists := c.Get("user_email")
@@ -251,16 +258,43 @@ func sendMailHandler(driver storage.Driver) gin.HandlerFunc {
 		if len(req.Cc) > 0 {
 			buf.WriteString(fmt.Sprintf("Cc: %s\r\n", strings.Join(req.Cc, ", ")))
 		}
+		if len(req.Bcc) > 0 {
+			buf.WriteString(fmt.Sprintf("Bcc: %s\r\n", strings.Join(req.Bcc, ", ")))
+		}
 		buf.WriteString(fmt.Sprintf("Subject: %s\r\n", req.Subject))
 		buf.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().Format(time.RFC1123Z)))
 		buf.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
 		buf.WriteString("\r\n")
 		buf.WriteString(req.Body)
 
+		mailData := buf.Bytes()
+
 		// 存储到 Sent 文件夹
 		ctx := c.Request.Context()
+		
+		// 先存储到 Maildir，获取文件名作为邮件 ID
+		var mailID string
+		if maildir != nil {
+			if err := maildir.EnsureUserMaildir(from); err == nil {
+				filename, err := maildir.StoreMail(from, "Sent", mailData)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"error": "保存邮件到 Maildir 失败",
+					})
+					return
+				}
+				mailID = filename
+			} else {
+				// 如果无法创建 Maildir，使用时间戳作为 ID
+				mailID = fmt.Sprintf("sent-%d", time.Now().UnixNano())
+			}
+		} else {
+			// 如果没有 Maildir，使用时间戳作为 ID
+			mailID = fmt.Sprintf("sent-%d", time.Now().UnixNano())
+		}
+
 		mail := &storage.Mail{
-			ID:         fmt.Sprintf("sent-%d", time.Now().UnixNano()),
+			ID:         mailID,
 			UserEmail:  from,
 			Folder:     "Sent",
 			From:       from,
@@ -269,7 +303,7 @@ func sendMailHandler(driver storage.Driver) gin.HandlerFunc {
 			Bcc:        req.Bcc,
 			Subject:    req.Subject,
 			Body:       []byte(req.Body),
-			Size:       int64(buf.Len()),
+			Size:       int64(len(mailData)),
 			Flags:      []string{},
 			ReceivedAt: time.Now(),
 			CreatedAt:  time.Now(),
@@ -282,15 +316,68 @@ func sendMailHandler(driver storage.Driver) gin.HandlerFunc {
 			return
 		}
 
+		// 处理本地邮件投递：检查每个收件人是否是本地用户
+		allRecipients := make([]string, 0)
+		allRecipients = append(allRecipients, req.To...)
+		allRecipients = append(allRecipients, req.Cc...)
+		allRecipients = append(allRecipients, req.Bcc...)
+
+		deliveredCount := 0
+		for _, recipient := range allRecipients {
+			// 检查是否是本地用户
+			user, err := driver.GetUser(ctx, recipient)
+			if err != nil {
+				// 检查别名
+				alias, err := driver.GetAlias(ctx, recipient)
+				if err != nil {
+					// 不是本地用户，跳过（后续可以通过 SMTP 中继发送）
+					continue
+				}
+				user, err = driver.GetUser(ctx, alias.To)
+				if err != nil {
+					continue
+				}
+			}
+
+			// 是本地用户，投递到收件箱
+			if maildir != nil {
+				if err := maildir.EnsureUserMaildir(user.Email); err == nil {
+					filename, err := maildir.StoreMail(user.Email, "INBOX", mailData)
+					if err == nil {
+						// 存储邮件元数据到数据库
+						inboxMail := &storage.Mail{
+							ID:         filename,
+							UserEmail:  user.Email,
+							Folder:     "INBOX",
+							From:       from,
+							To:         []string{recipient},
+							Cc:         req.Cc,
+							Bcc:        req.Bcc,
+							Subject:    req.Subject,
+							Size:       int64(len(mailData)),
+							Flags:      []string{},
+							ReceivedAt: time.Now(),
+							CreatedAt:  time.Now(),
+						}
+						if err := driver.StoreMail(ctx, inboxMail); err == nil {
+							deliveredCount++
+						}
+					}
+				}
+			}
+		}
+
 		// 发送邮件到外部服务器（通过本地 SMTP 服务器）
 		// 注意：这里简化实现，实际应该通过 SMTP 客户端发送到外部服务器
 		// 当前实现将邮件存储到 Sent 文件夹，实际发送需要配置 SMTP 中继服务器
 		// TODO: 实现 SMTP 中继客户端，将邮件发送到外部服务器
 
 		c.JSON(http.StatusOK, gin.H{
-			"message": "邮件已保存到已发送文件夹",
-			"id":      mail.ID,
-			"note":    "实际发送功能需要配置 SMTP 中继服务器",
+			"message":        "邮件已发送",
+			"id":             mail.ID,
+			"delivered":      deliveredCount,
+			"total_recipients": len(allRecipients),
+			"note":           "本地邮件已投递，外部邮件需要配置 SMTP 中继服务器",
 		})
 	}
 }

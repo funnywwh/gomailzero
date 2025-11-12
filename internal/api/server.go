@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"embed"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +15,9 @@ import (
 	"github.com/gomailzero/gmz/internal/logger"
 	"github.com/gomailzero/gmz/internal/storage"
 )
+
+//go:embed static/*
+var staticFiles embed.FS
 
 // Server API 服务器
 type Server struct {
@@ -31,6 +36,7 @@ func (s *Server) GetRouter() *gin.Engine {
 type Config struct {
 	Port       int
 	APIKey     string
+	Domain     string // 主域名，用于初始化
 	Storage    storage.Driver
 	JWTManager *auth.JWTManager
 	TOTPManager *auth.TOTPManager
@@ -45,10 +51,20 @@ func NewServer(cfg *Config) *Server {
 	router.Use(gin.Recovery())
 	router.Use(loggerMiddleware())
 
+	// 静态文件服务（管理界面）
+	router.StaticFS("/admin/static", http.FS(staticFiles))
+	// 支持 /admin/assets 路径（前端资源），映射到 static/assets
+	assetsFS, err := fs.Sub(staticFiles, "static/assets")
+	if err == nil {
+		router.StaticFS("/admin/assets", http.FS(assetsFS))
+	}
+
 	// 健康检查
 	router.GET("/health", healthHandler)
 
-	// 公开端点：登录
+	// 公开端点：初始化和登录
+	router.GET("/api/v1/init/check", checkInitHandler(cfg.Storage))
+	router.POST("/api/v1/init", initSystemHandler(cfg.Storage, cfg.JWTManager, cfg.Domain))
 	router.POST("/api/v1/auth/login", loginHandler(cfg.Storage, cfg.JWTManager, cfg.TOTPManager))
 
 	// API 路由组
@@ -80,6 +96,38 @@ func NewServer(cfg *Config) *Server {
 	// 配额管理
 	api.GET("/users/:email/quota", getQuotaHandler(cfg.Storage))
 	api.PUT("/users/:email/quota", updateQuotaHandler(cfg.Storage))
+
+	// 管理界面路由（SPA）
+	router.GET("/admin", func(c *gin.Context) {
+		data, err := staticFiles.ReadFile("static/index.html")
+		if err != nil {
+			c.String(http.StatusInternalServerError, "无法加载管理界面")
+			return
+		}
+		c.Data(http.StatusOK, "text/html; charset=utf-8", data)
+	})
+
+	// SPA 路由（所有 /admin/* 路由返回 index.html，除了 API 和静态资源）
+	router.NoRoute(func(c *gin.Context) {
+		path := c.Request.URL.Path
+		// 只处理 /admin 路径下的路由
+		if strings.HasPrefix(path, "/admin") {
+			// 排除 API 和静态资源路径
+			if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/admin/static") || strings.HasPrefix(path, "/admin/assets") {
+				c.Status(http.StatusNotFound)
+				return
+			}
+			// 返回 index.html
+			data, err := staticFiles.ReadFile("static/index.html")
+			if err != nil {
+				c.String(http.StatusInternalServerError, "无法加载管理界面")
+				return
+			}
+			c.Data(http.StatusOK, "text/html; charset=utf-8", data)
+			return
+		}
+		c.Status(http.StatusNotFound)
+	})
 
 	return &Server{
 		config:  cfg,
@@ -315,6 +363,14 @@ func loginHandler(driver storage.Driver, jwtManager *auth.JWTManager, totpManage
 			}
 		}
 
+		// 检查用户是否是管理员（只有管理员才能登录管理后台）
+		if !user.IsAdmin {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "只有管理员才能登录管理后台",
+			})
+			return
+		}
+
 		// 生成 JWT token
 		if jwtManager == nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -323,7 +379,7 @@ func loginHandler(driver storage.Driver, jwtManager *auth.JWTManager, totpManage
 			return
 		}
 
-		token, err := jwtManager.GenerateToken(user.Email, user.ID, false, 24*time.Hour)
+		token, err := jwtManager.GenerateToken(user.Email, user.ID, user.IsAdmin, 24*time.Hour)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "生成令牌失败",

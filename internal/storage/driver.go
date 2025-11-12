@@ -60,6 +60,7 @@ type User struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	Active       bool      `json:"active"`
+	IsAdmin      bool      `json:"is_admin"` // 是否是管理员
 }
 
 // Domain 域名

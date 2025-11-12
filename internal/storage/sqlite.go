@@ -79,6 +79,7 @@ func (d *SQLiteDriver) initSchema() error {
 		password_hash TEXT NOT NULL,
 		quota INTEGER DEFAULT 0,
 		active INTEGER DEFAULT 1,
+		is_admin INTEGER DEFAULT 0,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -135,19 +136,24 @@ func (d *SQLiteDriver) initSchema() error {
 // CreateUser 创建用户
 func (d *SQLiteDriver) CreateUser(ctx context.Context, user *User) error {
 	query := `
-		INSERT INTO users (email, password_hash, quota, active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO users (email, password_hash, quota, active, is_admin, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`
 	now := time.Now()
 	active := 0
 	if user.Active {
 		active = 1
 	}
+	isAdmin := 0
+	if user.IsAdmin {
+		isAdmin = 1
+	}
 	_, err := d.db.ExecContext(ctx, query,
 		user.Email,
 		user.PasswordHash,
 		user.Quota,
 		active,
+		isAdmin,
 		now,
 		now,
 	)
@@ -160,20 +166,21 @@ func (d *SQLiteDriver) CreateUser(ctx context.Context, user *User) error {
 // GetUser 获取用户
 func (d *SQLiteDriver) GetUser(ctx context.Context, email string) (*User, error) {
 	query := `
-		SELECT id, email, password_hash, quota, active, created_at, updated_at
+		SELECT id, email, password_hash, quota, active, is_admin, created_at, updated_at
 		FROM users
 		WHERE email = ?
 	`
 	row := d.db.QueryRowContext(ctx, query, email)
 
 	var user User
-	var active int
+	var active, isAdmin int
 	err := row.Scan(
 		&user.ID,
 		&user.Email,
 		&user.PasswordHash,
 		&user.Quota,
 		&active,
+		&isAdmin,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
@@ -185,6 +192,7 @@ func (d *SQLiteDriver) GetUser(ctx context.Context, email string) (*User, error)
 	}
 
 	user.Active = active == 1
+	user.IsAdmin = isAdmin == 1
 	return &user, nil
 }
 
@@ -192,18 +200,23 @@ func (d *SQLiteDriver) GetUser(ctx context.Context, email string) (*User, error)
 func (d *SQLiteDriver) UpdateUser(ctx context.Context, user *User) error {
 	query := `
 		UPDATE users
-		SET email = ?, password_hash = ?, quota = ?, active = ?, updated_at = ?
+		SET email = ?, password_hash = ?, quota = ?, active = ?, is_admin = ?, updated_at = ?
 		WHERE id = ?
 	`
 	active := 0
 	if user.Active {
 		active = 1
 	}
+	isAdmin := 0
+	if user.IsAdmin {
+		isAdmin = 1
+	}
 	_, err := d.db.ExecContext(ctx, query,
 		user.Email,
 		user.PasswordHash,
 		user.Quota,
 		active,
+		isAdmin,
 		time.Now(),
 		user.ID,
 	)
@@ -226,7 +239,7 @@ func (d *SQLiteDriver) DeleteUser(ctx context.Context, email string) error {
 // ListUsers 列出用户
 func (d *SQLiteDriver) ListUsers(ctx context.Context, limit, offset int) ([]*User, error) {
 	query := `
-		SELECT id, email, password_hash, quota, active, created_at, updated_at
+		SELECT id, email, password_hash, quota, active, is_admin, created_at, updated_at
 		FROM users
 		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?
@@ -240,19 +253,21 @@ func (d *SQLiteDriver) ListUsers(ctx context.Context, limit, offset int) ([]*Use
 	var users []*User
 	for rows.Next() {
 		var user User
-		var active int
+		var active, isAdmin int
 		if err := rows.Scan(
 			&user.ID,
 			&user.Email,
 			&user.PasswordHash,
 			&user.Quota,
 			&active,
+			&isAdmin,
 			&user.CreatedAt,
 			&user.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("扫描用户失败: %w", err)
 		}
 		user.Active = active == 1
+		user.IsAdmin = isAdmin == 1
 		users = append(users, &user)
 	}
 
@@ -489,6 +504,10 @@ func (d *SQLiteDriver) StoreMail(ctx context.Context, mail *Mail) error {
 	}
 
 	now := time.Now()
+	// 将时间格式化为 SQLite 兼容的格式（RFC3339）
+	receivedAtStr := mail.ReceivedAt.Format(time.RFC3339)
+	createdAtStr := now.Format(time.RFC3339)
+
 	_, err := d.db.ExecContext(ctx, query,
 		mail.ID,
 		mail.UserEmail,
@@ -500,8 +519,8 @@ func (d *SQLiteDriver) StoreMail(ctx context.Context, mail *Mail) error {
 		mail.Subject,
 		mail.Size,
 		flags,
-		mail.ReceivedAt,
-		now,
+		receivedAtStr,
+		createdAtStr,
 	)
 	if err != nil {
 		return fmt.Errorf("存储邮件失败: %w", err)
@@ -519,20 +538,21 @@ func (d *SQLiteDriver) GetMail(ctx context.Context, id string) (*Mail, error) {
 	row := d.db.QueryRowContext(ctx, query, id)
 
 	var mail Mail
-	var toAddrs, flags string
+	var toAddrs, ccAddrs, bccAddrs, flags string
+	var receivedAtStr, createdAtStr string
 	err := row.Scan(
 		&mail.ID,
 		&mail.UserEmail,
 		&mail.Folder,
 		&mail.From,
 		&toAddrs,
-		&mail.Cc,
-		&mail.Bcc,
+		&ccAddrs,
+		&bccAddrs,
 		&mail.Subject,
 		&mail.Size,
 		&flags,
-		&mail.ReceivedAt,
-		&mail.CreatedAt,
+		&receivedAtStr,
+		&createdAtStr,
 	)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("邮件不存在: %w", ErrNotFound)
@@ -541,12 +561,49 @@ func (d *SQLiteDriver) GetMail(ctx context.Context, id string) (*Mail, error) {
 		return nil, fmt.Errorf("查询邮件失败: %w", err)
 	}
 
-	// 解析字符串为切片
+	// 解析 to_addrs（用逗号分割）
 	if toAddrs != "" {
-		mail.To = []string{toAddrs} // 简化处理
+		mail.To = strings.Split(toAddrs, ",")
+		// 去除空格
+		for i := range mail.To {
+			mail.To[i] = strings.TrimSpace(mail.To[i])
+		}
 	}
+	// 解析 cc_addrs（用逗号分割）
+	if ccAddrs != "" {
+		mail.Cc = strings.Split(ccAddrs, ",")
+		// 去除空格
+		for i := range mail.Cc {
+			mail.Cc[i] = strings.TrimSpace(mail.Cc[i])
+		}
+	}
+	// 解析 bcc_addrs（用逗号分割）
+	if bccAddrs != "" {
+		mail.Bcc = strings.Split(bccAddrs, ",")
+		// 去除空格
+		for i := range mail.Bcc {
+			mail.Bcc[i] = strings.TrimSpace(mail.Bcc[i])
+		}
+	}
+	// 解析 flags（用逗号分割）
 	if flags != "" {
-		mail.Flags = []string{flags} // 简化处理
+		mail.Flags = strings.Split(flags, ",")
+		// 去除空格
+		for i := range mail.Flags {
+			mail.Flags[i] = strings.TrimSpace(mail.Flags[i])
+		}
+	}
+
+	// 解析时间字符串
+	if receivedAtStr != "" {
+		if t := parseTimeString(receivedAtStr); !t.IsZero() {
+			mail.ReceivedAt = t
+		}
+	}
+	if createdAtStr != "" {
+		if t := parseTimeString(createdAtStr); !t.IsZero() {
+			mail.CreatedAt = t
+		}
 	}
 
 	return &mail, nil
@@ -579,38 +636,112 @@ func (d *SQLiteDriver) ListMails(ctx context.Context, userEmail string, folder s
 	}
 	defer rows.Close()
 
-	var mails []*Mail
+	mails := make([]*Mail, 0) // 初始化为空切片，而不是 nil
 	for rows.Next() {
 		var mail Mail
-		var toAddrs, flags string
+		var toAddrs, ccAddrs, bccAddrs, flags string
+		var receivedAtStr, createdAtStr string
 		if err := rows.Scan(
 			&mail.ID,
 			&mail.UserEmail,
 			&mail.Folder,
 			&mail.From,
 			&toAddrs,
-			&mail.Cc,
-			&mail.Bcc,
+			&ccAddrs,
+			&bccAddrs,
 			&mail.Subject,
 			&mail.Size,
 			&flags,
-			&mail.ReceivedAt,
-			&mail.CreatedAt,
+			&receivedAtStr,
+			&createdAtStr,
 		); err != nil {
 			return nil, fmt.Errorf("扫描邮件失败: %w", err)
 		}
 
+		// 解析 to_addrs（用逗号分割）
 		if toAddrs != "" {
-			mail.To = []string{toAddrs}
+			mail.To = strings.Split(toAddrs, ",")
+			// 去除空格
+			for i := range mail.To {
+				mail.To[i] = strings.TrimSpace(mail.To[i])
+			}
 		}
+		// 解析 cc_addrs（用逗号分割）
+		if ccAddrs != "" {
+			mail.Cc = strings.Split(ccAddrs, ",")
+			// 去除空格
+			for i := range mail.Cc {
+				mail.Cc[i] = strings.TrimSpace(mail.Cc[i])
+			}
+		}
+		// 解析 bcc_addrs（用逗号分割）
+		if bccAddrs != "" {
+			mail.Bcc = strings.Split(bccAddrs, ",")
+			// 去除空格
+			for i := range mail.Bcc {
+				mail.Bcc[i] = strings.TrimSpace(mail.Bcc[i])
+			}
+		}
+		// 解析 flags（用逗号分割）
 		if flags != "" {
-			mail.Flags = []string{flags}
+			mail.Flags = strings.Split(flags, ",")
+			// 去除空格
+			for i := range mail.Flags {
+				mail.Flags[i] = strings.TrimSpace(mail.Flags[i])
+			}
+		}
+
+		// 解析时间字符串
+		if receivedAtStr != "" {
+			if t := parseTimeString(receivedAtStr); !t.IsZero() {
+				mail.ReceivedAt = t
+			}
+		}
+		if createdAtStr != "" {
+			if t := parseTimeString(createdAtStr); !t.IsZero() {
+				mail.CreatedAt = t
+			}
 		}
 
 		mails = append(mails, &mail)
 	}
 
 	return mails, nil
+}
+
+// parseTimeString 解析时间字符串，支持多种格式（向后兼容）
+func parseTimeString(timeStr string) time.Time {
+	// 尝试 RFC3339 格式（标准格式）
+	if t, err := time.Parse(time.RFC3339, timeStr); err == nil {
+		return t
+	}
+
+	// 尝试 RFC3339Nano 格式
+	if t, err := time.Parse(time.RFC3339Nano, timeStr); err == nil {
+		return t
+	}
+
+	// 尝试 Go time.Time.String() 格式（包含 m=+xxx 调试信息）
+	// 格式：2006-01-02 15:04:05.999999999 -0700 MST m=+xxx
+	if idx := strings.Index(timeStr, " m="); idx > 0 {
+		timeStr = timeStr[:idx]
+		if t, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", timeStr); err == nil {
+			return t
+		}
+	}
+
+	// 尝试标准格式（无时区）
+	if t, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", timeStr); err == nil {
+		return t
+	}
+
+	// 尝试简单格式
+	if t, err := time.Parse("2006-01-02 15:04:05", timeStr); err == nil {
+		return t
+	}
+
+	// 如果所有格式都失败，返回零值时间
+	return time.Time{}
 }
 
 // SearchMails 搜索邮件
@@ -636,32 +767,71 @@ func (d *SQLiteDriver) SearchMails(ctx context.Context, userEmail string, query 
 	}
 	defer rows.Close()
 
-	var mails []*Mail
+	mails := make([]*Mail, 0) // 初始化为空切片，而不是 nil
 	for rows.Next() {
 		var mail Mail
-		var toAddrs, flags string
+		var toAddrs, ccAddrs, bccAddrs, flags string
+		var receivedAtStr, createdAtStr string
 		if err := rows.Scan(
 			&mail.ID,
 			&mail.UserEmail,
 			&mail.Folder,
 			&mail.From,
 			&toAddrs,
-			&mail.Cc,
-			&mail.Bcc,
+			&ccAddrs,
+			&bccAddrs,
 			&mail.Subject,
 			&mail.Size,
 			&flags,
-			&mail.ReceivedAt,
-			&mail.CreatedAt,
+			&receivedAtStr,
+			&createdAtStr,
 		); err != nil {
 			return nil, fmt.Errorf("扫描邮件失败: %w", err)
 		}
 
+		// 解析 to_addrs（用逗号分割）
 		if toAddrs != "" {
 			mail.To = strings.Split(toAddrs, ",")
+			// 去除空格
+			for i := range mail.To {
+				mail.To[i] = strings.TrimSpace(mail.To[i])
+			}
 		}
+		// 解析 cc_addrs（用逗号分割）
+		if ccAddrs != "" {
+			mail.Cc = strings.Split(ccAddrs, ",")
+			// 去除空格
+			for i := range mail.Cc {
+				mail.Cc[i] = strings.TrimSpace(mail.Cc[i])
+			}
+		}
+		// 解析 bcc_addrs（用逗号分割）
+		if bccAddrs != "" {
+			mail.Bcc = strings.Split(bccAddrs, ",")
+			// 去除空格
+			for i := range mail.Bcc {
+				mail.Bcc[i] = strings.TrimSpace(mail.Bcc[i])
+			}
+		}
+		// 解析 flags（用逗号分割）
 		if flags != "" {
 			mail.Flags = strings.Split(flags, ",")
+			// 去除空格
+			for i := range mail.Flags {
+				mail.Flags[i] = strings.TrimSpace(mail.Flags[i])
+			}
+		}
+
+		// 解析时间字符串
+		if receivedAtStr != "" {
+			if t := parseTimeString(receivedAtStr); !t.IsZero() {
+				mail.ReceivedAt = t
+			}
+		}
+		if createdAtStr != "" {
+			if t := parseTimeString(createdAtStr); !t.IsZero() {
+				mail.CreatedAt = t
+			}
 		}
 
 		mails = append(mails, &mail)

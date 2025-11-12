@@ -1,41 +1,41 @@
 <template>
   <div class="login-container">
     <div class="login-box">
-      <h1>GoMailZero</h1>
-      <form @submit.prevent="handleLogin">
+      <h1>GoMailZero 管理后台</h1>
+      <form @submit.prevent="handleLogin" class="login-form">
         <div class="form-group">
-          <label for="email">邮箱</label>
+          <label>邮箱</label>
           <input
-            id="email"
-            v-model="email"
+            v-model="form.email"
             type="email"
             required
-            placeholder="your@email.com"
+            placeholder="admin@example.com"
+            class="form-input"
           />
         </div>
         <div class="form-group">
-          <label for="password">密码</label>
+          <label>密码</label>
           <input
-            id="password"
-            v-model="password"
+            v-model="form.password"
             type="password"
             required
-            placeholder="••••••••"
+            placeholder="请输入密码"
+            class="form-input"
           />
         </div>
-        <div v-if="requiresTOTP" class="form-group">
-          <label for="totp">TOTP 代码</label>
+        <div v-if="requires2FA" class="form-group">
+          <label>TOTP 代码</label>
           <input
-            id="totp"
-            v-model="totpCode"
+            v-model="form.totpCode"
             type="text"
             required
-            placeholder="000000"
+            placeholder="请输入 TOTP 代码"
+            class="form-input"
             maxlength="6"
           />
         </div>
-        <div v-if="error" class="error">{{ error }}</div>
-        <button type="submit" :disabled="loading">
+        <div v-if="error" class="error-message">{{ error }}</div>
+        <button type="submit" :disabled="loading" class="login-btn">
           {{ loading ? '登录中...' : '登录' }}
         </button>
       </form>
@@ -50,12 +50,15 @@ import { api } from '../api'
 
 const router = useRouter()
 
-const email = ref('')
-const password = ref('')
-const totpCode = ref('')
-const requiresTOTP = ref(false)
+const form = ref({
+  email: '',
+  password: '',
+  totpCode: ''
+})
+
 const loading = ref(false)
 const error = ref('')
+const requires2FA = ref(false)
 
 const handleLogin = async () => {
   loading.value = true
@@ -63,23 +66,25 @@ const handleLogin = async () => {
 
   try {
     const response = await api.login({
-      email: email.value,
-      password: password.value,
-      totp_code: requiresTOTP.value ? totpCode.value : undefined
+      email: form.value.email,
+      password: form.value.password,
+      totp_code: form.value.totpCode || undefined
     })
 
     if (response.requires_2fa) {
-      requiresTOTP.value = true
+      requires2FA.value = true
+      error.value = '请输入 TOTP 代码'
       loading.value = false
       return
     }
 
-    if (response.token) {
-      localStorage.setItem('token', response.token)
-      router.push('/mails')
-    }
+    localStorage.setItem('admin_token', response.token)
+    router.push('/')
   } catch (err: any) {
     error.value = err.response?.data?.error || '登录失败'
+    if (err.response?.data?.requires_2fa) {
+      requires2FA.value = true
+    }
   } finally {
     loading.value = false
   }
@@ -104,68 +109,66 @@ const handleLogin = async () => {
   max-width: 400px;
 }
 
-h1 {
+.login-box h1 {
   text-align: center;
   margin-bottom: 2rem;
   color: #333;
+  font-size: 1.5rem;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .form-group {
-  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
-label {
-  display: block;
-  margin-bottom: 0.5rem;
-  color: #666;
+.form-group label {
   font-weight: 500;
+  color: #666;
 }
 
-input {
-  width: 100%;
+.form-input {
   padding: 0.75rem;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 1rem;
 }
 
-input:focus {
+.form-input:focus {
   outline: none;
   border-color: #667eea;
 }
 
-button {
-  width: 100%;
+.error-message {
+  color: #e74c3c;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.login-btn {
   padding: 0.75rem;
   background: #667eea;
   color: white;
   border: none;
   border-radius: 4px;
   font-size: 1rem;
-  font-weight: 500;
   cursor: pointer;
-  margin-top: 1rem;
+  transition: background 0.2s;
 }
 
-button:hover:not(:disabled) {
+.login-btn:hover:not(:disabled) {
   background: #5568d3;
 }
 
-button:disabled {
+.login-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.error {
-  color: #e74c3c;
-  margin-top: 0.5rem;
-  font-size: 0.875rem;
-}
-
-.checking {
-  text-align: center;
-  color: #666;
-  padding: 2rem;
 }
 </style>
 
