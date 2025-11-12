@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -203,4 +204,44 @@ func TestSQLiteDriver_Concurrent(t *testing.T) {
 	}
 	
 	t.Logf("成功创建 %d/%d 用户（SQLite 并发限制）", len(users), numUsers)
+}
+
+func TestSQLiteDriver_AutoCreateDir(t *testing.T) {
+	// 测试自动创建目录功能
+	tmpdir, err := os.MkdirTemp("", "test-dir-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpdir)
+
+	// 使用不存在的子目录
+	dbPath := filepath.Join(tmpdir, "subdir", "test.db")
+	
+	// 确保子目录不存在
+	subdir := filepath.Dir(dbPath)
+	if _, err := os.Stat(subdir); err == nil {
+		t.Fatalf("子目录应该不存在: %s", subdir)
+	}
+
+	// 创建驱动（应该自动创建目录）
+	driver, err := NewSQLiteDriver(dbPath)
+	if err != nil {
+		t.Fatalf("创建驱动失败: %v", err)
+	}
+	defer driver.Close()
+
+	// 验证目录已创建
+	if _, err := os.Stat(subdir); err != nil {
+		t.Fatalf("目录应该已创建: %v", err)
+	}
+
+	// 验证数据库文件可以创建
+	if err := driver.initSchema(); err != nil {
+		t.Fatalf("初始化数据库失败: %v", err)
+	}
+
+	// 验证数据库文件存在
+	if _, err := os.Stat(dbPath); err != nil {
+		t.Fatalf("数据库文件应该已创建: %v", err)
+	}
 }

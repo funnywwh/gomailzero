@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -16,6 +19,16 @@ type Greylist struct {
 
 // NewGreylist 创建灰名单
 func NewGreylist(dsn string) (*Greylist, error) {
+	// 对于非内存数据库，确保目录存在
+	if dsn != ":memory:" && !strings.HasPrefix(dsn, "file:") {
+		dir := filepath.Dir(dsn)
+		if dir != "." && dir != "" {
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				return nil, fmt.Errorf("创建数据库目录失败: %w", err)
+			}
+		}
+	}
+
 	db, err := sql.Open("sqlite", dsn+"?_pragma=journal_mode(WAL)")
 	if err != nil {
 		return nil, fmt.Errorf("打开数据库失败: %w", err)
