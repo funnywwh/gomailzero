@@ -186,4 +186,3 @@ func GetMigrationsDir() (string, error) {
 
 	return "", fmt.Errorf("找不到迁移目录")
 }
-

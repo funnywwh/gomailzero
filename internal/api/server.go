@@ -34,11 +34,11 @@ func (s *Server) GetRouter() *gin.Engine {
 
 // Config API 配置
 type Config struct {
-	Port       int
-	APIKey     string
-	Domain     string // 主域名，用于初始化
-	Storage    storage.Driver
-	JWTManager *auth.JWTManager
+	Port        int
+	APIKey      string
+	Domain      string // 主域名，用于初始化
+	Storage     storage.Driver
+	JWTManager  *auth.JWTManager
 	TOTPManager *auth.TOTPManager
 }
 
@@ -274,7 +274,7 @@ func totpRequiredMiddleware(totpManager *auth.TOTPManager, storage storage.Drive
 
 		if totpCode == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "需要 TOTP 代码",
+				"error":        "需要 TOTP 代码",
 				"requires_2fa": true,
 			})
 			c.Abort()
@@ -346,7 +346,7 @@ func loginHandler(driver storage.Driver, jwtManager *auth.JWTManager, totpManage
 				// 如果启用了 TOTP，必须提供 TOTP 代码
 				if req.TOTPCode == "" {
 					c.JSON(http.StatusUnauthorized, gin.H{
-						"error": "需要 TOTP 代码",
+						"error":        "需要 TOTP 代码",
 						"requires_2fa": true,
 					})
 					return

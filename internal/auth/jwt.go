@@ -28,9 +28,9 @@ func NewJWTManager(secretKey string, issuer string) *JWTManager {
 
 // Claims JWT 声明
 type Claims struct {
-	Email    string `json:"email"`
-	UserID   int64  `json:"user_id"`
-	IsAdmin  bool   `json:"is_admin"`
+	Email   string `json:"email"`
+	UserID  int64  `json:"user_id"`
+	IsAdmin bool   `json:"is_admin"`
 	jwt.RegisteredClaims
 }
 
@@ -86,4 +86,3 @@ func (m *JWTManager) RefreshToken(tokenString string, expiry time.Duration) (str
 	// 生成新令牌
 	return m.GenerateToken(claims.Email, claims.UserID, claims.IsAdmin, expiry)
 }
-

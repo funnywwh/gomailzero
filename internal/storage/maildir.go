@@ -178,7 +178,7 @@ func (m *Maildir) ReadMail(userEmail string, folder string, filename string) ([]
 	// 尝试从 cur 读取（文件名可能包含标志后缀，如 :2,S）
 	curDir := filepath.Join(folderDir, "cur")
 	var filePath string
-	
+
 	// 先尝试直接匹配文件名
 	filePath = filepath.Join(curDir, filename)
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -195,7 +195,7 @@ func (m *Maildir) ReadMail(userEmail string, folder string, filename string) ([]
 				}
 			}
 		}
-		
+
 		// 如果 cur 中找不到，尝试从 new 读取
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			newDir := filepath.Join(folderDir, "new")

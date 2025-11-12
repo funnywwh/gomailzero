@@ -146,7 +146,7 @@ func TestSQLiteDriver_Concurrent(t *testing.T) {
 	// 这是 SQLite 的已知限制，使用 WAL 模式可以缓解但无法完全避免
 	// 跳过此测试或标记为可能失败
 	t.Skip("SQLite 并发写入测试：已知限制，SQLite 在高并发下可能返回 'database is locked' 错误")
-	
+
 	tmpfile, err := os.CreateTemp("", "test-*.db")
 	if err != nil {
 		t.Fatal(err)
@@ -202,7 +202,7 @@ func TestSQLiteDriver_Concurrent(t *testing.T) {
 	if len(users) == 0 {
 		t.Error("至少应该创建一些用户")
 	}
-	
+
 	t.Logf("成功创建 %d/%d 用户（SQLite 并发限制）", len(users), numUsers)
 }
 
@@ -216,7 +216,7 @@ func TestSQLiteDriver_AutoCreateDir(t *testing.T) {
 
 	// 使用不存在的子目录
 	dbPath := filepath.Join(tmpdir, "subdir", "test.db")
-	
+
 	// 确保子目录不存在
 	subdir := filepath.Dir(dbPath)
 	if _, err := os.Stat(subdir); err == nil {

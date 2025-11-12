@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gomailzero/gmz/internal/antispam"
 	"github.com/gomailzero/gmz/internal/api"
 	"github.com/gomailzero/gmz/internal/auth"
 	"github.com/gomailzero/gmz/internal/config"
@@ -18,10 +19,11 @@ import (
 	"github.com/gomailzero/gmz/internal/logger"
 	"github.com/gomailzero/gmz/internal/metrics"
 	"github.com/gomailzero/gmz/internal/migrate"
+	"github.com/gomailzero/gmz/internal/smtpclient"
 	"github.com/gomailzero/gmz/internal/smtpd"
 	"github.com/gomailzero/gmz/internal/storage"
-	"github.com/gomailzero/gmz/internal/web"
 	tlsconfig "github.com/gomailzero/gmz/internal/tls"
+	"github.com/gomailzero/gmz/internal/web"
 	"github.com/rs/zerolog/log"
 )
 
@@ -174,16 +176,16 @@ func main() {
 			jwtSecret = "change-me-in-production" // 默认密钥（生产环境必须更改）
 		}
 		jwtManager := auth.NewJWTManager(jwtSecret, "gomailzero")
-		
+
 		// 创建 TOTP 管理器
 		totpManager := auth.NewTOTPManager(storageDriver)
 
 		apiServer := api.NewServer(&api.Config{
-			Port:       cfg.Admin.Port,
-			APIKey:     cfg.Admin.APIKey,
-			Domain:     cfg.Domain,
-			Storage:    storageDriver,
-			JWTManager: jwtManager,
+			Port:        cfg.Admin.Port,
+			APIKey:      cfg.Admin.APIKey,
+			Domain:      cfg.Domain,
+			Storage:     storageDriver,
+			JWTManager:  jwtManager,
 			TOTPManager: totpManager,
 		})
 
@@ -225,6 +227,17 @@ func main() {
 		// 创建 TOTP 管理器
 		totpManager := auth.NewTOTPManager(storageDriver)
 
+		// 加载 DKIM（如果配置了）
+		var dkim *antispam.DKIM
+		if cfg.SMTP.DKIM.Enabled {
+			dkimInstance, err := smtpclient.LoadDKIM(&cfg.SMTP.DKIM, cfg.Domain, cfg.WorkDir)
+			if err != nil {
+				log.Warn().Err(err).Msg("加载 DKIM 失败，将发送未签名的邮件")
+			} else {
+				dkim = dkimInstance
+			}
+		}
+
 		webServer := web.NewServer(&web.Config{
 			Path:        cfg.WebMail.Path,
 			Port:        cfg.WebMail.Port,
@@ -235,6 +248,8 @@ func main() {
 			JWTIssuer:   cfg.Domain,
 			TOTPManager: totpManager,
 			AdminPort:   cfg.Admin.Port, // 管理 API 端口，用于代理管理界面
+			SMTPConfig:  &cfg.SMTP,      // SMTP 配置，用于外发邮件
+			DKIM:        dkim,           // DKIM 签名器
 		})
 
 		go func() {

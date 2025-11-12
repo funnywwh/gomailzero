@@ -35,6 +35,14 @@ smtp:
   ports: [25, 465, 587]  # 监听端口
   max_size: 50MB         # 最大邮件大小
   hostname: ""           # 主机名（留空使用系统主机名）
+  # 外发邮件中继配置（可选，推荐配置以提高发送成功率）
+  relay:
+    enabled: false       # 是否启用中继服务器
+    host: ""             # 中继服务器地址（如 smtp.qq.com, smtp.gmail.com）
+    port: 587            # 中继服务器端口（587 用于 STARTTLS，465 用于 TLS）
+    username: ""         # 邮箱账号（如 your-email@qq.com）
+    password: ""         # 邮箱密码或授权码（QQ 邮箱需要使用授权码）
+    use_tls: true        # 是否使用 TLS（端口 587 通常需要，465 必须使用）
 
 # IMAP 配置
 imap:

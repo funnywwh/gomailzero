@@ -56,6 +56,28 @@ type SMTPConfig struct {
 	Ports    []int  `yaml:"ports" mapstructure:"ports"`
 	MaxSize  string `yaml:"max_size" mapstructure:"max_size"`
 	Hostname string `yaml:"hostname" mapstructure:"hostname"`
+	// 外发邮件中继配置（可选）
+	Relay RelayConfig `yaml:"relay" mapstructure:"relay"`
+	// DKIM 配置（用于直接投递时提高发送成功率）
+	DKIM DKIMConfig `yaml:"dkim" mapstructure:"dkim"`
+}
+
+// DKIMConfig DKIM 配置
+type DKIMConfig struct {
+	Enabled    bool   `yaml:"enabled" mapstructure:"enabled"`         // 是否启用 DKIM 签名
+	Selector   string `yaml:"selector" mapstructure:"selector"`       // DKIM 选择器（如 default）
+	PrivateKey string `yaml:"private_key" mapstructure:"private_key"` // DKIM 私钥文件路径（相对于 workdir）
+	Domain     string `yaml:"domain" mapstructure:"domain"`           // 签名域名（留空使用主域名）
+}
+
+// RelayConfig SMTP 中继配置
+type RelayConfig struct {
+	Enabled  bool   `yaml:"enabled" mapstructure:"enabled"`
+	Host     string `yaml:"host" mapstructure:"host"`         // 中继服务器地址（如 smtp.qq.com）
+	Port     int    `yaml:"port" mapstructure:"port"`         // 中继服务器端口（如 587）
+	Username string `yaml:"username" mapstructure:"username"` // 邮箱账号
+	Password string `yaml:"password" mapstructure:"password"` // 邮箱密码或授权码
+	UseTLS   bool   `yaml:"use_tls" mapstructure:"use_tls"`   // 是否使用 TLS（端口 587 通常需要）
 }
 
 // IMAPConfig IMAP 配置

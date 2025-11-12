@@ -54,4 +54,3 @@ func TestIMAPFetchMail(t *testing.T) {
 func TestIMAPSearch(t *testing.T) {
 	t.Skip("需要完整的 IMAP 服务器启动流程")
 }
-

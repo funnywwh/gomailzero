@@ -69,4 +69,3 @@ func TestSMTPDelivery(t *testing.T) {
 func TestSMTPRejection(t *testing.T) {
 	t.Skip("需要完整的 SMTP 服务器启动流程")
 }
-

@@ -50,10 +50,10 @@ func TestAPILogin(t *testing.T) {
 	totpManager := auth.NewTOTPManager(driver)
 
 	apiServer := api.NewServer(&api.Config{
-		Port:       8080,
-		APIKey:     "test-key",
-		Storage:    driver,
-		JWTManager: jwtManager,
+		Port:        8080,
+		APIKey:      "test-key",
+		Storage:     driver,
+		JWTManager:  jwtManager,
 		TOTPManager: totpManager,
 	})
 
@@ -101,10 +101,10 @@ func TestAPICreateUser(t *testing.T) {
 	totpManager := auth.NewTOTPManager(driver)
 
 	apiServer := api.NewServer(&api.Config{
-		Port:       8080,
-		APIKey:     "test-key",
-		Storage:    driver,
-		JWTManager: jwtManager,
+		Port:        8080,
+		APIKey:      "test-key",
+		Storage:     driver,
+		JWTManager:  jwtManager,
 		TOTPManager: totpManager,
 	})
 
@@ -171,10 +171,10 @@ func TestAPIGetUser(t *testing.T) {
 	totpManager := auth.NewTOTPManager(driver)
 
 	apiServer := api.NewServer(&api.Config{
-		Port:       8080,
-		APIKey:     "test-key",
-		Storage:    driver,
-		JWTManager: jwtManager,
+		Port:        8080,
+		APIKey:      "test-key",
+		Storage:     driver,
+		JWTManager:  jwtManager,
 		TOTPManager: totpManager,
 	})
 
@@ -199,4 +199,3 @@ func TestAPIGetUser(t *testing.T) {
 		t.Errorf("用户邮箱不匹配: got %s, want test@example.com", retrievedUser.Email)
 	}
 }
-

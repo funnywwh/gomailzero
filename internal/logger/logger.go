@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"context"
 	"io"
 	"os"
 	"strings"
@@ -8,6 +9,25 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
+
+// traceIDKey 用于在 context 中存储 trace_id 的键
+type traceIDKey struct{}
+
+// WithTraceIDContext 将 trace_id 添加到 context
+func WithTraceIDContext(ctx context.Context, traceID string) context.Context {
+	return context.WithValue(ctx, traceIDKey{}, traceID)
+}
+
+// TraceIDFromContext 从 context 中获取 trace_id
+func TraceIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if traceID, ok := ctx.Value(traceIDKey{}).(string); ok {
+		return traceID
+	}
+	return ""
+}
 
 var globalLogger zerolog.Logger
 
@@ -65,9 +85,24 @@ func WithTraceID(traceID string) zerolog.Logger {
 	return globalLogger.With().Str("trace_id", traceID).Logger()
 }
 
+// FromContext 从 context 创建带 trace_id 的 logger
+func FromContext(ctx context.Context) *zerolog.Logger {
+	traceID := TraceIDFromContext(ctx)
+	if traceID != "" {
+		logger := globalLogger.With().Str("trace_id", traceID).Logger()
+		return &logger
+	}
+	return &globalLogger
+}
+
 // Error 返回错误级别日志
 func Error() *zerolog.Event {
 	return globalLogger.Error()
+}
+
+// ErrorCtx 从 context 返回错误级别日志（包含 trace_id）
+func ErrorCtx(ctx context.Context) *zerolog.Event {
+	return FromContext(ctx).Error()
 }
 
 // Info 返回信息级别日志
@@ -75,9 +110,19 @@ func Info() *zerolog.Event {
 	return globalLogger.Info()
 }
 
+// InfoCtx 从 context 返回信息级别日志（包含 trace_id）
+func InfoCtx(ctx context.Context) *zerolog.Event {
+	return FromContext(ctx).Info()
+}
+
 // Debug 返回调试级别日志
 func Debug() *zerolog.Event {
 	return globalLogger.Debug()
+}
+
+// DebugCtx 从 context 返回调试级别日志（包含 trace_id）
+func DebugCtx(ctx context.Context) *zerolog.Event {
+	return FromContext(ctx).Debug()
 }
 
 // Warn 返回警告级别日志
@@ -85,7 +130,17 @@ func Warn() *zerolog.Event {
 	return globalLogger.Warn()
 }
 
+// WarnCtx 从 context 返回警告级别日志（包含 trace_id）
+func WarnCtx(ctx context.Context) *zerolog.Event {
+	return FromContext(ctx).Warn()
+}
+
 // Fatal 返回致命级别日志
 func Fatal() *zerolog.Event {
 	return globalLogger.Fatal()
+}
+
+// FatalCtx 从 context 返回致命级别日志（包含 trace_id）
+func FatalCtx(ctx context.Context) *zerolog.Event {
+	return FromContext(ctx).Fatal()
 }

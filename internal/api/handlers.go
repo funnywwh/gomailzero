@@ -440,7 +440,7 @@ func updateQuotaHandler(driver storage.Driver) gin.HandlerFunc {
 func checkInitHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
-		
+
 		// 检查是否有用户
 		users, err := driver.ListUsers(ctx, 1, 0)
 		if err != nil {

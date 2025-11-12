@@ -1,14 +1,48 @@
 package web
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gomailzero/gmz/internal/auth"
+	"github.com/gomailzero/gmz/internal/logger"
 	"github.com/gomailzero/gmz/internal/storage"
 )
+
+// traceIDMiddleware 生成并传播 trace_id 的中间件
+func traceIDMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 尝试从请求头获取 trace_id（支持分布式追踪）
+		traceID := c.GetHeader("X-Trace-ID")
+		if traceID == "" {
+			// 生成新的 trace_id
+			traceID = generateTraceID()
+		}
+
+		// 将 trace_id 添加到 context
+		ctx := logger.WithTraceIDContext(c.Request.Context(), traceID)
+		c.Request = c.Request.WithContext(ctx)
+
+		// 将 trace_id 存储到 gin.Context 中（方便访问）
+		c.Set("trace_id", traceID)
+
+		// 在响应头中返回 trace_id（便于客户端追踪）
+		c.Header("X-Trace-ID", traceID)
+
+		c.Next()
+	}
+}
+
+// generateTraceID 生成 trace_id（16 字节的随机十六进制字符串）
+func generateTraceID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
 
 // jwtMiddleware JWT 认证中间件
 func jwtMiddleware(jwtManager *auth.JWTManager, driver storage.Driver) gin.HandlerFunc {
@@ -82,4 +116,3 @@ func jwtMiddleware(jwtManager *auth.JWTManager, driver storage.Driver) gin.Handl
 		c.Next()
 	}
 }
-

@@ -24,4 +24,3 @@ func TestWebAuthnManager_FinishLogin(t *testing.T) {
 	// TODO: 实现 WebAuthn 登录完成测试
 	t.Skip("WebAuthn 测试待实现")
 }
-

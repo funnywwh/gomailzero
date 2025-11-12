@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gomailzero/gmz/internal/antispam"
 	"github.com/gomailzero/gmz/internal/auth"
+	"github.com/gomailzero/gmz/internal/config"
 	"github.com/gomailzero/gmz/internal/logger"
 	"github.com/gomailzero/gmz/internal/storage"
 )
@@ -39,7 +41,9 @@ type Config struct {
 	JWTSecret   string
 	JWTIssuer   string
 	TOTPManager *auth.TOTPManager
-	AdminPort   int // 管理 API 端口，用于代理管理界面
+	AdminPort   int                // 管理 API 端口，用于代理管理界面
+	SMTPConfig  *config.SMTPConfig // SMTP 配置，用于外发邮件
+	DKIM        *antispam.DKIM     // DKIM 签名器（可选）
 }
 
 // NewServer 创建 WebMail 服务器
@@ -48,6 +52,7 @@ func NewServer(cfg *Config) *Server {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
+	router.Use(traceIDMiddleware()) // trace_id 中间件必须在最前面
 	router.Use(loggerMiddleware())
 
 	// 静态文件服务
@@ -89,14 +94,14 @@ func NewServer(cfg *Config) *Server {
 		api.GET("/init/check", checkInitHandler(cfg.Storage))
 		api.POST("/init", initSystemHandler(cfg.Storage, jwtManager, cfg.Domain))
 		api.POST("/login", loginHandler(cfg.Storage, jwtManager, cfg.TOTPManager))
-		
+
 		// 需要认证的端点
 		api.Use(jwtMiddleware(jwtManager, cfg.Storage))
 		{
 			api.GET("/mails", listMailsHandler(cfg.Storage))
 			api.GET("/mails/search", searchMailsHandler(cfg.Storage))
 			api.GET("/mails/:id", getMailHandler(cfg.Storage, cfg.Maildir))
-			api.POST("/mails", sendMailHandler(cfg.Storage, cfg.Maildir))
+			api.POST("/mails", sendMailHandler(cfg.Storage, cfg.Maildir, cfg.SMTPConfig, cfg.DKIM))
 			api.POST("/mails/drafts", saveDraftHandler(cfg.Storage))
 			api.DELETE("/mails/:id", deleteMailHandler(cfg.Storage))
 			api.PUT("/mails/:id/flags", updateMailFlagsHandler(cfg.Storage))
@@ -113,7 +118,7 @@ func NewServer(cfg *Config) *Server {
 		}
 		c.Data(http.StatusOK, "text/html; charset=utf-8", data)
 	})
-	
+
 	// SPA 路由（所有其他路由返回 index.html）
 	router.NoRoute(func(c *gin.Context) {
 		// 排除 API 和静态资源路径
@@ -194,7 +199,15 @@ func loggerMiddleware() gin.HandlerFunc {
 			errMsg = errs.String()
 		}
 
+		// 获取 trace_id
+		traceID, _ := c.Get("trace_id")
+		traceIDStr := ""
+		if traceID != nil {
+			traceIDStr = traceID.(string)
+		}
+
 		logEntry := logger.Info().
+			Str("trace_id", traceIDStr).
 			Int("status", status).
 			Str("method", c.Request.Method).
 			Str("path", path).

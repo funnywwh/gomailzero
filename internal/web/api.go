@@ -1,7 +1,6 @@
 package web
 
 import (
-	"bytes"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -9,8 +8,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gomailzero/gmz/internal/antispam"
 	"github.com/gomailzero/gmz/internal/auth"
+	"github.com/gomailzero/gmz/internal/config"
 	"github.com/gomailzero/gmz/internal/crypto"
+	"github.com/gomailzero/gmz/internal/logger"
+	"github.com/gomailzero/gmz/internal/smtpclient"
 	"github.com/gomailzero/gmz/internal/storage"
 )
 
@@ -163,7 +166,7 @@ func getMailHandler(driver storage.Driver, maildir *storage.Maildir) gin.Handler
 			if err == nil {
 				// 解析邮件体（简单实现：查找 text/plain 和 text/html 部分）
 				bodyStr := string(body)
-				
+
 				// 检查是否是 MIME 格式
 				if strings.Contains(bodyStr, "Content-Type:") {
 					// 简单的 MIME 解析
@@ -180,7 +183,7 @@ func getMailHandler(driver storage.Driver, maildir *storage.Maildir) gin.Handler
 							bodyText = strings.TrimSpace(plainText)
 						}
 					}
-					
+
 					// 查找 text/html 部分
 					if idx := strings.Index(bodyStr, "Content-Type: text/html"); idx >= 0 {
 						bodyStart := strings.Index(bodyStr[idx:], "\r\n\r\n")
@@ -210,7 +213,7 @@ func getMailHandler(driver storage.Driver, maildir *storage.Maildir) gin.Handler
 			"cc":          mail.Cc,
 			"bcc":         mail.Bcc,
 			"subject":     mail.Subject,
-			"body":        bodyText,  // 纯文本正文
+			"body":        bodyText, // 纯文本正文
 			"body_html":   bodyHTML, // HTML 正文
 			"size":        mail.Size,
 			"flags":       mail.Flags,
@@ -223,7 +226,7 @@ func getMailHandler(driver storage.Driver, maildir *storage.Maildir) gin.Handler
 }
 
 // sendMailHandler 发送邮件
-func sendMailHandler(driver storage.Driver, maildir *storage.Maildir) gin.HandlerFunc {
+func sendMailHandler(driver storage.Driver, maildir *storage.Maildir, relayConfig *config.SMTPConfig, dkim *antispam.DKIM) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 从 JWT 获取用户邮箱
 		userEmail, exists := c.Get("user_email")
@@ -236,11 +239,12 @@ func sendMailHandler(driver storage.Driver, maildir *storage.Maildir) gin.Handle
 		}
 
 		var req struct {
-			To      []string `json:"to" binding:"required"`
-			Cc      []string `json:"cc"`
-			Bcc     []string `json:"bcc"`
-			Subject string   `json:"subject" binding:"required"`
-			Body    string   `json:"body" binding:"required"`
+			To              []string `json:"to" binding:"required"`
+			Cc              []string `json:"cc"`
+			Bcc             []string `json:"bcc"`
+			Subject         string   `json:"subject" binding:"required"`
+			Body            string   `json:"body" binding:"required"`
+			FromDisplayName string   `json:"from_display_name"` // 可选的发件人显示名称
 		}
 
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -250,28 +254,23 @@ func sendMailHandler(driver storage.Driver, maildir *storage.Maildir) gin.Handle
 			return
 		}
 
-		// 构建邮件
+		// 构建邮件（使用 buildMailMessage 以支持 DKIM 签名和显示名称）
 		from := userEmail.(string)
-		var buf bytes.Buffer
-		buf.WriteString(fmt.Sprintf("From: %s\r\n", from))
-		buf.WriteString(fmt.Sprintf("To: %s\r\n", strings.Join(req.To, ", ")))
-		if len(req.Cc) > 0 {
-			buf.WriteString(fmt.Sprintf("Cc: %s\r\n", strings.Join(req.Cc, ", ")))
+		mailData, err := buildMailMessage(from, req.FromDisplayName, req.To, req.Cc, req.Bcc, req.Subject, req.Body, dkim)
+		if err != nil {
+			logger.ErrorCtx(c.Request.Context()).
+				Err(err).
+				Str("from", from).
+				Msg("构建邮件失败")
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "构建邮件失败",
+			})
+			return
 		}
-		if len(req.Bcc) > 0 {
-			buf.WriteString(fmt.Sprintf("Bcc: %s\r\n", strings.Join(req.Bcc, ", ")))
-		}
-		buf.WriteString(fmt.Sprintf("Subject: %s\r\n", req.Subject))
-		buf.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().Format(time.RFC1123Z)))
-		buf.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
-		buf.WriteString("\r\n")
-		buf.WriteString(req.Body)
-
-		mailData := buf.Bytes()
 
 		// 存储到 Sent 文件夹
 		ctx := c.Request.Context()
-		
+
 		// 先存储到 Maildir，获取文件名作为邮件 ID
 		var mailID string
 		if maildir != nil {
@@ -322,7 +321,10 @@ func sendMailHandler(driver storage.Driver, maildir *storage.Maildir) gin.Handle
 		allRecipients = append(allRecipients, req.Cc...)
 		allRecipients = append(allRecipients, req.Bcc...)
 
-		deliveredCount := 0
+		// 分离本地和外部收件人
+		var localRecipients []string
+		var externalRecipients []string
+
 		for _, recipient := range allRecipients {
 			// 检查是否是本地用户
 			user, err := driver.GetUser(ctx, recipient)
@@ -330,16 +332,20 @@ func sendMailHandler(driver storage.Driver, maildir *storage.Maildir) gin.Handle
 				// 检查别名
 				alias, err := driver.GetAlias(ctx, recipient)
 				if err != nil {
-					// 不是本地用户，跳过（后续可以通过 SMTP 中继发送）
+					// 不是本地用户，是外部收件人
+					externalRecipients = append(externalRecipients, recipient)
 					continue
 				}
 				user, err = driver.GetUser(ctx, alias.To)
 				if err != nil {
+					// 别名目标不存在，作为外部收件人
+					externalRecipients = append(externalRecipients, recipient)
 					continue
 				}
 			}
 
 			// 是本地用户，投递到收件箱
+			localRecipients = append(localRecipients, recipient)
 			if maildir != nil {
 				if err := maildir.EnsureUserMaildir(user.Email); err == nil {
 					filename, err := maildir.StoreMail(user.Email, "INBOX", mailData)
@@ -360,24 +366,78 @@ func sendMailHandler(driver storage.Driver, maildir *storage.Maildir) gin.Handle
 							CreatedAt:  time.Now(),
 						}
 						if err := driver.StoreMail(ctx, inboxMail); err == nil {
-							deliveredCount++
+							// 本地投递成功
 						}
 					}
 				}
 			}
 		}
 
-		// 发送邮件到外部服务器（通过本地 SMTP 服务器）
-		// 注意：这里简化实现，实际应该通过 SMTP 客户端发送到外部服务器
-		// 当前实现将邮件存储到 Sent 文件夹，实际发送需要配置 SMTP 中继服务器
-		// TODO: 实现 SMTP 中继客户端，将邮件发送到外部服务器
+		// 发送邮件到外部服务器
+		externalDeliveredCount := 0
+		if len(externalRecipients) > 0 {
+			// 获取 EHLO 主机名（从配置中获取，如果未配置则使用邮箱域名）
+			hostname := ""
+			if relayConfig != nil {
+				hostname = relayConfig.Hostname
+			}
+			smtpClient := smtpclient.NewClient(hostname)
+			var err error
+
+			// 如果配置了中继服务器，优先使用中继服务器
+			if relayConfig != nil && relayConfig.Relay.Enabled {
+				err = smtpClient.SendMailToRelay(
+					ctx,
+					relayConfig.Relay.Host,
+					relayConfig.Relay.Port,
+					relayConfig.Relay.Username,
+					relayConfig.Relay.Password,
+					relayConfig.Relay.UseTLS,
+					from,
+					externalRecipients,
+					mailData,
+				)
+				if err != nil {
+					logger.ErrorCtx(ctx).
+						Err(err).
+						Str("from", from).
+						Strs("to", externalRecipients).
+						Str("relay", relayConfig.Relay.Host).
+						Msg("通过中继服务器发送外部邮件失败")
+				} else {
+					externalDeliveredCount = len(externalRecipients)
+					logger.InfoCtx(ctx).
+						Str("from", from).
+						Strs("to", externalRecipients).
+						Str("relay", relayConfig.Relay.Host).
+						Msg("通过中继服务器成功发送外部邮件")
+				}
+			} else {
+				// 没有配置中继服务器，直接发送到目标服务器
+				err = smtpClient.SendMail(ctx, from, externalRecipients, mailData)
+				if err != nil {
+					logger.ErrorCtx(ctx).
+						Err(err).
+						Str("from", from).
+						Strs("to", externalRecipients).
+						Msg("直接发送外部邮件失败（建议配置 SMTP 中继服务器）")
+					// 发送失败不影响响应，但记录错误
+				} else {
+					externalDeliveredCount = len(externalRecipients)
+					logger.InfoCtx(ctx).
+						Str("from", from).
+						Strs("to", externalRecipients).
+						Msg("直接发送外部邮件成功")
+				}
+			}
+		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"message":        "邮件已发送",
-			"id":             mail.ID,
-			"delivered":      deliveredCount,
-			"total_recipients": len(allRecipients),
-			"note":           "本地邮件已投递，外部邮件需要配置 SMTP 中继服务器",
+			"message":            "邮件已发送",
+			"id":                 mail.ID,
+			"local_delivered":    len(localRecipients),
+			"external_delivered": externalDeliveredCount,
+			"total_recipients":   len(allRecipients),
 		})
 	}
 }
@@ -519,7 +579,7 @@ func listFoldersHandler(driver storage.Driver) gin.HandlerFunc {
 func checkInitHandler(driver storage.Driver) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
-		
+
 		// 检查是否有用户
 		users, err := driver.ListUsers(ctx, 1, 0)
 		if err != nil {

@@ -37,7 +37,7 @@ func NewWebAuthnManager(cfg WebAuthnConfig, storage storage.Driver) (*WebAuthnMa
 	w, err := webauthn.New(&webauthn.Config{
 		RPDisplayName: cfg.RPDisplayName,
 		RPID:          cfg.RPID,
-		RPOrigins:    []string{originURL.String()},
+		RPOrigins:     []string{originURL.String()},
 		// 使用默认的挑战超时时间（60秒）
 		// 使用默认的认证器选择器
 	})
@@ -261,4 +261,3 @@ func (m *WebAuthnManager) updateCredential(ctx context.Context, userEmail string
 
 	return nil
 }
-

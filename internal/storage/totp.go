@@ -69,4 +69,3 @@ func (d *SQLiteDriver) IsTOTPEnabled(ctx context.Context, userEmail string) (boo
 	}
 	return count > 0, nil
 }
-
