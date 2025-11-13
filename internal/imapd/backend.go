@@ -5,6 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -119,32 +122,457 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 			Msg("IMAP GetMailbox: 从数据库读取邮件")
 	}
 
-	// 如果 Maildir 可用，检查是否有新邮件未同步到数据库
+	// 如果 Maildir 可用，检查文件系统状态并同步
 	if u.maildir != nil {
-		// 列出 Maildir 中的邮件文件（使用标准化名称）
-		maildirFiles, err := u.maildir.ListMails(u.user.Email, normalizedName)
-		if err == nil {
-			// 检查是否有文件不在数据库中
-			mailIDMap := make(map[string]bool)
-			for _, mail := range mails {
-				mailIDMap[mail.ID] = true
+		userDir := u.maildir.GetUserMaildir(u.user.Email)
+		var curDir string
+		var newDir string
+		if normalizedName == "INBOX" || normalizedName == "" {
+			curDir = filepath.Join(userDir, "cur")
+			newDir = filepath.Join(userDir, "new")
+		} else {
+			curDir = filepath.Join(userDir, "."+normalizedName, "cur")
+			newDir = filepath.Join(userDir, "."+normalizedName, "new")
+		}
+		
+		// 构建数据库中已有的邮件 ID 映射
+		mailIDMap := make(map[string]bool)
+		for _, mail := range mails {
+			baseID := mail.ID
+			if idx := strings.Index(mail.ID, ":"); idx >= 0 {
+				baseID = mail.ID[:idx]
 			}
-			
-			// 对于不在数据库中的文件，尝试同步（简化处理，只记录日志）
-			for _, filename := range maildirFiles {
-				// 去除可能的标志后缀（如 :2,S）
+			mailIDMap[baseID] = true
+			mailIDMap[mail.ID] = true
+		}
+		
+		// 检查 cur 目录中的文件，同步缺失的邮件到数据库
+		curEntries, err := os.ReadDir(curDir)
+		if err == nil {
+			for _, entry := range curEntries {
+				if entry.IsDir() {
+					continue
+				}
+				filename := entry.Name()
 				baseID := filename
 				if idx := strings.Index(filename, ":"); idx >= 0 {
 					baseID = filename[:idx]
 				}
+				
+				// 如果文件不在数据库中，尝试同步
 				if !mailIDMap[baseID] && !mailIDMap[filename] {
 					logger.Debug().
 						Str("user", u.user.Email).
-						Str("folder", name).
+						Str("folder", normalizedName).
 						Str("filename", filename).
-						Msg("发现 Maildir 中的邮件未同步到数据库")
+						Msg("IMAP GetMailbox: 发现 Maildir 中的邮件未同步到数据库，尝试同步")
+					
+					// 读取邮件文件
+					mailData, err := u.maildir.ReadMail(u.user.Email, normalizedName, baseID)
+					if err == nil {
+						var fromHeader, toHeader, subject string
+						var bodyBytes []byte
+						
+						// 尝试使用 message.Read 解析
+						msg, err := message.Read(bytes.NewReader(mailData))
+						if err == nil {
+							header := msg.Header
+							fromHeader = header.Get("From")
+							toHeader = header.Get("To")
+							subject = header.Get("Subject")
+							
+							// 读取邮件体
+							if msg.Body != nil {
+								bodyBytes, _ = io.ReadAll(msg.Body)
+							}
+						}
+						
+						// 如果 message.Read 解析失败或邮件头为空，尝试手动解析
+						// 检查是否以 "This is a multi-part message" 开头（缺少邮件头）
+						mailDataStr := string(mailData)
+						if fromHeader == "" && strings.HasPrefix(mailDataStr, "This is a multi-part message") {
+							// 这种格式的邮件缺少邮件头，尝试从文件名或其他方式推断
+							// 或者使用默认值
+							logger.Debug().
+								Str("user", u.user.Email).
+								Str("folder", normalizedName).
+								Str("mail_id", baseID).
+								Msg("IMAP GetMailbox: 邮件缺少标准邮件头，使用默认值")
+							fromHeader = "unknown@unknown"
+							toHeader = u.user.Email
+							subject = "(无主题)"
+							bodyBytes = mailData
+						} else if fromHeader == "" {
+							// 尝试手动解析邮件头（如果 message.Read 失败但文件有邮件头）
+							lines := strings.Split(mailDataStr, "\n")
+							for i, line := range lines {
+								line = strings.TrimSpace(line)
+								if strings.HasPrefix(strings.ToLower(line), "from:") {
+									fromHeader = strings.TrimSpace(line[5:])
+								} else if strings.HasPrefix(strings.ToLower(line), "to:") {
+									toHeader = strings.TrimSpace(line[3:])
+								} else if strings.HasPrefix(strings.ToLower(line), "subject:") {
+									subject = strings.TrimSpace(line[8:])
+								} else if line == "" && i > 0 {
+									// 空行表示邮件头结束
+									// 邮件体从下一行开始
+									if i+1 < len(lines) {
+										bodyBytes = []byte(strings.Join(lines[i+1:], "\n"))
+									}
+									break
+								}
+							}
+							if fromHeader == "" {
+								fromHeader = "unknown@unknown"
+							}
+							if toHeader == "" {
+								toHeader = u.user.Email
+							}
+							if subject == "" {
+								subject = "(无主题)"
+							}
+							if len(bodyBytes) == 0 {
+								bodyBytes = mailData
+							}
+						}
+						
+						// 解析 From 地址
+						fromAddr := fromHeader
+						if fromAddr == "" {
+							fromAddr = "unknown@unknown"
+						}
+						// 清理 From 地址
+						fromAddr = strings.TrimSpace(fromAddr)
+						if idx := strings.Index(fromAddr, "<"); idx >= 0 {
+							if idx2 := strings.Index(fromAddr, ">"); idx2 > idx {
+								fromAddr = fromAddr[idx+1 : idx2]
+							}
+						}
+						fromAddr = strings.Trim(fromAddr, "\"")
+						fromAddr = strings.TrimSpace(fromAddr)
+						if fromAddr == "" || fromAddr == "<>" {
+							fromAddr = "unknown@unknown"
+						}
+						
+						// 解析 To 地址
+						toAddrs := []string{}
+						if toHeader != "" {
+							// 简单的地址解析（支持多个地址，用逗号分隔）
+							parts := strings.Split(toHeader, ",")
+							for _, part := range parts {
+								addr := strings.TrimSpace(part)
+								// 提取邮箱地址
+								if idx := strings.Index(addr, "<"); idx >= 0 {
+									if idx2 := strings.Index(addr, ">"); idx2 > idx {
+										addr = addr[idx+1 : idx2]
+									}
+								}
+								addr = strings.Trim(addr, "\"")
+								addr = strings.TrimSpace(addr)
+								if addr != "" {
+									toAddrs = append(toAddrs, addr)
+								}
+							}
+						}
+						if len(toAddrs) == 0 {
+							toAddrs = []string{u.user.Email}
+						}
+						
+						// 确定标志（如果文件在 cur 目录且有 :2,S 后缀，说明已读）
+						flags := []string{}
+						if strings.Contains(filename, ":2,S") || strings.Contains(filename, ":2,RS") {
+							flags = []string{"\\Seen"}
+						} else {
+							flags = []string{"\\Recent"}
+						}
+						
+						// 获取文件修改时间作为接收时间
+						fileInfo, err := entry.Info()
+						receivedAt := time.Now()
+						if err == nil {
+							receivedAt = fileInfo.ModTime()
+						}
+						
+						// 创建邮件记录
+						syncMail := &storage.Mail{
+							ID:         baseID,
+							UserEmail:  u.user.Email,
+							Folder:     normalizedName,
+							From:       fromAddr,
+							To:         toAddrs,
+							Subject:    subject,
+							Body:       bodyBytes,
+							Size:       int64(len(mailData)),
+							Flags:      flags,
+							ReceivedAt: receivedAt,
+							CreatedAt:  receivedAt,
+						}
+						
+						// 存储到数据库
+						if err := u.storage.StoreMail(ctx, syncMail); err != nil {
+							logger.Warn().Err(err).
+								Str("user", u.user.Email).
+								Str("folder", normalizedName).
+								Str("mail_id", baseID).
+								Msg("同步邮件到数据库失败")
+						} else {
+							// 添加到邮件列表
+							mails = append(mails, syncMail)
+							mailIDMap[baseID] = true
+							logger.Info().
+								Str("user", u.user.Email).
+								Str("folder", normalizedName).
+								Str("mail_id", baseID).
+								Str("from", fromAddr).
+								Str("subject", subject).
+								Msg("IMAP GetMailbox: 成功同步邮件到数据库")
+						}
+					}
 				}
 			}
+		}
+		
+		// 检查 new 目录中的文件，同步缺失的邮件到数据库
+		newEntries, err := os.ReadDir(newDir)
+		if err == nil {
+			newFileMap := make(map[string]bool)
+			for _, entry := range newEntries {
+				if !entry.IsDir() {
+					filename := entry.Name()
+					baseID := filename
+					if idx := strings.Index(filename, ":"); idx >= 0 {
+						baseID = filename[:idx]
+					}
+					newFileMap[baseID] = true
+					
+					// 如果文件不在数据库中，尝试同步
+					if !mailIDMap[baseID] && !mailIDMap[filename] {
+						logger.Debug().
+							Str("user", u.user.Email).
+							Str("folder", normalizedName).
+							Str("filename", filename).
+							Msg("IMAP GetMailbox: 发现 new 目录中的邮件未同步到数据库，尝试同步")
+						
+						// 读取邮件文件
+						mailData, err := u.maildir.ReadMail(u.user.Email, normalizedName, baseID)
+						if err == nil {
+							var fromHeader, toHeader, subject string
+							var bodyBytes []byte
+							
+							// 尝试使用 message.Read 解析
+							msg, err := message.Read(bytes.NewReader(mailData))
+							if err == nil {
+								header := msg.Header
+								fromHeader = header.Get("From")
+								toHeader = header.Get("To")
+								subject = header.Get("Subject")
+								
+								// 读取邮件体
+								if msg.Body != nil {
+									bodyBytes, _ = io.ReadAll(msg.Body)
+								}
+							}
+							
+							// 如果 message.Read 解析失败或邮件头为空，尝试手动解析
+							// 检查是否以 "This is a multi-part message" 开头（缺少邮件头）
+							mailDataStr := string(mailData)
+							if fromHeader == "" && strings.HasPrefix(mailDataStr, "This is a multi-part message") {
+								// 这种格式的邮件缺少邮件头，尝试从文件名或其他方式推断
+								// 或者使用默认值
+								logger.Debug().
+									Str("user", u.user.Email).
+									Str("folder", normalizedName).
+									Str("mail_id", baseID).
+									Msg("IMAP GetMailbox: 邮件缺少标准邮件头，使用默认值（new）")
+								fromHeader = "unknown@unknown"
+								toHeader = u.user.Email
+								subject = "(无主题)"
+								bodyBytes = mailData
+							} else if fromHeader == "" {
+								// 尝试手动解析邮件头（如果 message.Read 失败但文件有邮件头）
+								lines := strings.Split(mailDataStr, "\n")
+								for i, line := range lines {
+									line = strings.TrimSpace(line)
+									if strings.HasPrefix(strings.ToLower(line), "from:") {
+										fromHeader = strings.TrimSpace(line[5:])
+									} else if strings.HasPrefix(strings.ToLower(line), "to:") {
+										toHeader = strings.TrimSpace(line[3:])
+									} else if strings.HasPrefix(strings.ToLower(line), "subject:") {
+										subject = strings.TrimSpace(line[8:])
+									} else if line == "" && i > 0 {
+										// 空行表示邮件头结束
+										// 邮件体从下一行开始
+										if i+1 < len(lines) {
+											bodyBytes = []byte(strings.Join(lines[i+1:], "\n"))
+										}
+										break
+									}
+								}
+								if fromHeader == "" {
+									fromHeader = "unknown@unknown"
+								}
+								if toHeader == "" {
+									toHeader = u.user.Email
+								}
+								if subject == "" {
+									subject = "(无主题)"
+								}
+								if len(bodyBytes) == 0 {
+									bodyBytes = mailData
+								}
+							}
+							
+							// 解析 From 地址
+							fromAddr := fromHeader
+							if fromAddr == "" {
+								fromAddr = "unknown@unknown"
+							}
+							// 清理 From 地址
+							fromAddr = strings.TrimSpace(fromAddr)
+							if idx := strings.Index(fromAddr, "<"); idx >= 0 {
+								if idx2 := strings.Index(fromAddr, ">"); idx2 > idx {
+									fromAddr = fromAddr[idx+1 : idx2]
+								}
+							}
+							fromAddr = strings.Trim(fromAddr, "\"")
+							fromAddr = strings.TrimSpace(fromAddr)
+							if fromAddr == "" || fromAddr == "<>" {
+								fromAddr = "unknown@unknown"
+							}
+							
+							// 解析 To 地址
+							toAddrs := []string{}
+							if toHeader != "" {
+								parts := strings.Split(toHeader, ",")
+								for _, part := range parts {
+									addr := strings.TrimSpace(part)
+									if idx := strings.Index(addr, "<"); idx >= 0 {
+										if idx2 := strings.Index(addr, ">"); idx2 > idx {
+											addr = addr[idx+1 : idx2]
+										}
+									}
+									addr = strings.Trim(addr, "\"")
+									addr = strings.TrimSpace(addr)
+									if addr != "" {
+										toAddrs = append(toAddrs, addr)
+									}
+								}
+							}
+							if len(toAddrs) == 0 {
+								toAddrs = []string{u.user.Email}
+							}
+							
+							// 获取文件修改时间作为接收时间
+							fileInfo, err := entry.Info()
+							receivedAt := time.Now()
+							if err == nil {
+								receivedAt = fileInfo.ModTime()
+							}
+							
+							// 创建邮件记录（new 目录中的邮件是未读的）
+							syncMail := &storage.Mail{
+								ID:         baseID,
+								UserEmail:  u.user.Email,
+								Folder:     normalizedName,
+								From:       fromAddr,
+								To:         toAddrs,
+								Subject:    subject,
+								Body:       bodyBytes,
+								Size:       int64(len(mailData)),
+								Flags:      []string{"\\Recent"}, // new 目录中的邮件是未读的
+								ReceivedAt: receivedAt,
+								CreatedAt:  receivedAt,
+							}
+							
+							// 存储到数据库
+							if err := u.storage.StoreMail(ctx, syncMail); err != nil {
+								logger.Warn().Err(err).
+									Str("user", u.user.Email).
+									Str("folder", normalizedName).
+									Str("mail_id", baseID).
+									Msg("同步邮件到数据库失败")
+							} else {
+								// 添加到邮件列表
+								mails = append(mails, syncMail)
+								mailIDMap[baseID] = true
+								logger.Info().
+									Str("user", u.user.Email).
+									Str("folder", normalizedName).
+									Str("mail_id", baseID).
+									Str("from", fromAddr).
+									Str("subject", subject).
+									Msg("IMAP GetMailbox: 成功同步邮件到数据库（new）")
+							}
+						}
+					}
+				}
+			}
+			
+			// 检查数据库中的邮件，如果文件在 new 目录中但标志有 \Seen，需要修复
+			for _, mail := range mails {
+				baseID := mail.ID
+				if idx := strings.Index(mail.ID, ":"); idx >= 0 {
+					baseID = mail.ID[:idx]
+				}
+				
+				// 如果文件在 new 目录中，但标志有 \Seen，这是不一致的
+				if newFileMap[baseID] {
+					hasSeen := false
+					hasRecent := false
+					for _, flag := range mail.Flags {
+						if flag == imap.SeenFlag || flag == "\\Seen" {
+							hasSeen = true
+						}
+						if flag == imap.RecentFlag || flag == "\\Recent" {
+							hasRecent = true
+						}
+					}
+					
+					// 如果文件在 new 目录中，但标志有 \Seen，移除 \Seen 标志
+					if hasSeen {
+						logger.Debug().
+							Str("user", u.user.Email).
+							Str("folder", normalizedName).
+							Str("mail_id", baseID).
+							Msg("IMAP GetMailbox: 发现文件在 new 目录但标志有 \\Seen，修复标志")
+						
+						// 移除 \Seen 标志，保留 \Recent
+						newFlags := make([]string, 0)
+						for _, flag := range mail.Flags {
+							if flag != imap.SeenFlag && flag != "\\Seen" {
+								newFlags = append(newFlags, flag)
+							}
+						}
+						// 确保有 \Recent 标志
+						if !hasRecent {
+							newFlags = append(newFlags, imap.RecentFlag)
+						}
+						
+						if err := u.storage.UpdateMailFlags(ctx, mail.ID, newFlags); err != nil {
+							logger.Warn().Err(err).
+								Str("user", u.user.Email).
+								Str("folder", normalizedName).
+								Str("mail_id", baseID).
+								Msg("修复邮件标志失败")
+						} else {
+							mail.Flags = newFlags
+							logger.Debug().
+								Str("user", u.user.Email).
+								Str("folder", normalizedName).
+								Str("mail_id", baseID).
+								Strs("new_flags", newFlags).
+								Msg("IMAP GetMailbox: 已修复邮件标志")
+						}
+					}
+				}
+			}
+		}
+		
+		// 重新排序邮件（按接收时间降序）
+		if len(mails) > 0 {
+			sort.Slice(mails, func(i, j int) bool {
+				return mails[i].ReceivedAt.After(mails[j].ReceivedAt)
+			})
 		}
 	}
 
@@ -164,6 +592,43 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 		// 如果邮件没有 \Seen 标志，且没有 \Recent 标志，自动设置 \Seen 标志（兼容 Foxmail）
 		if !hasSeen && !hasRecent {
 			newFlags := append(mail.Flags, imap.SeenFlag)
+			
+			// 如果邮件被标记为已读，且之前未读，需要从 new 移动到 cur
+			if u.maildir != nil {
+				// 去除可能的标志后缀（如 :2,S）
+				baseID := mail.ID
+				if idx := strings.Index(mail.ID, ":"); idx >= 0 {
+					baseID = mail.ID[:idx]
+				}
+				
+				// 检查文件是否在 new 目录中
+				userDir := u.maildir.GetUserMaildir(u.user.Email)
+				var newDir string
+				if normalizedName == "INBOX" || normalizedName == "" {
+					newDir = filepath.Join(userDir, "new")
+				} else {
+					newDir = filepath.Join(userDir, "."+normalizedName, "new")
+				}
+				
+				newPath := filepath.Join(newDir, baseID)
+				if _, err := os.Stat(newPath); err == nil {
+					// 文件在 new 目录中，移动到 cur
+					if err := u.maildir.MoveToCur(u.user.Email, normalizedName, baseID, newFlags); err != nil {
+						logger.Warn().Err(err).
+							Str("user", u.user.Email).
+							Str("folder", normalizedName).
+							Str("mail_id", baseID).
+							Msg("移动邮件从 new 到 cur 失败（GetMailbox）")
+					} else {
+						logger.Debug().
+							Str("user", u.user.Email).
+							Str("folder", normalizedName).
+							Str("mail_id", baseID).
+							Msg("IMAP GetMailbox: 邮件已从 new 移动到 cur")
+					}
+				}
+			}
+			
 			if err := u.storage.UpdateMailFlags(ctx, mail.ID, newFlags); err != nil {
 				logger.Warn().Err(err).Str("mail_id", mail.ID).Msg("自动设置 \\Seen 标志失败（GetMailbox）")
 			} else {
@@ -223,6 +688,70 @@ func NewMailbox(storage storage.Driver, maildir *storage.Maildir, userEmail, nam
 		name:      name,
 		mails:     mails,
 	}
+}
+
+// updateMailFlagsAndMove 更新邮件标志，并在需要时移动文件（从 new 到 cur）
+func (m *Mailbox) updateMailFlagsAndMove(ctx context.Context, mail *storage.Mail, newFlags []string) error {
+	// 检查是否需要移动邮件文件（从 new 到 cur）
+	hasSeen := false
+	hadSeen := false
+	for _, f := range newFlags {
+		if f == imap.SeenFlag || f == "\\Seen" {
+			hasSeen = true
+			break
+		}
+	}
+	for _, f := range mail.Flags {
+		if f == imap.SeenFlag || f == "\\Seen" {
+			hadSeen = true
+			break
+		}
+	}
+
+	// 如果邮件被标记为已读，且之前未读，需要从 new 移动到 cur
+	if hasSeen && !hadSeen && m.maildir != nil {
+		// 去除可能的标志后缀（如 :2,S）
+		baseID := mail.ID
+		if idx := strings.Index(mail.ID, ":"); idx >= 0 {
+			baseID = mail.ID[:idx]
+		}
+		
+		// 检查文件是否在 new 目录中
+		userDir := m.maildir.GetUserMaildir(m.userEmail)
+		var newDir string
+		if m.name == "INBOX" || m.name == "" {
+			newDir = filepath.Join(userDir, "new")
+		} else {
+			newDir = filepath.Join(userDir, "."+m.name, "new")
+		}
+		
+		newPath := filepath.Join(newDir, baseID)
+		if _, err := os.Stat(newPath); err == nil {
+			// 文件在 new 目录中，移动到 cur
+			if err := m.maildir.MoveToCur(m.userEmail, m.name, baseID, newFlags); err != nil {
+				logger.Warn().Err(err).
+					Str("user", m.userEmail).
+					Str("folder", m.name).
+					Str("mail_id", baseID).
+					Msg("移动邮件从 new 到 cur 失败")
+			} else {
+				logger.Debug().
+					Str("user", m.userEmail).
+					Str("folder", m.name).
+					Str("mail_id", baseID).
+					Msg("邮件已从 new 移动到 cur")
+			}
+		}
+	}
+
+	// 更新存储
+	if err := m.storage.UpdateMailFlags(ctx, mail.ID, newFlags); err != nil {
+		return fmt.Errorf("更新邮件标志失败: %w", err)
+	}
+
+	// 更新内存中的标志
+	mail.Flags = newFlags
+	return nil
 }
 
 // Name 返回邮箱名称
@@ -591,11 +1120,9 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 				if !hasSeen && !hasRecent {
 					ctx := context.Background()
 					newFlags := append(mail.Flags, imap.SeenFlag)
-					if err := m.storage.UpdateMailFlags(ctx, mail.ID, newFlags); err != nil {
+					if err := m.updateMailFlagsAndMove(ctx, mail, newFlags); err != nil {
 						logger.Warn().Err(err).Str("mail_id", mail.ID).Msg("自动设置 \\Seen 标志失败（FetchFlags）")
 					} else {
-						// 更新内存中的标志
-						mail.Flags = newFlags
 						msg.Flags = newFlags
 						msg.Items[item] = newFlags
 						logger.Debug().
@@ -703,11 +1230,9 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 									newFlags = append(newFlags, f)
 								}
 							}
-							if err := m.storage.UpdateMailFlags(ctx, mail.ID, newFlags); err != nil {
+							if err := m.updateMailFlagsAndMove(ctx, mail, newFlags); err != nil {
 								logger.Warn().Err(err).Str("mail_id", mail.ID).Msg("自动设置 \\Seen 标志失败")
 							} else {
-								// 更新内存中的标志
-								mail.Flags = newFlags
 								logger.Debug().
 									Str("user", m.userEmail).
 									Str("folder", m.name).
@@ -860,11 +1385,9 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 									newFlags = append(newFlags, f)
 								}
 							}
-							if err := m.storage.UpdateMailFlags(ctx, mail.ID, newFlags); err != nil {
+							if err := m.updateMailFlagsAndMove(ctx, mail, newFlags); err != nil {
 								logger.Warn().Err(err).Str("mail_id", mail.ID).Msg("自动设置 \\Seen 标志失败")
 							} else {
-								// 更新内存中的标志
-								mail.Flags = newFlags
 								logger.Debug().
 									Str("user", m.userEmail).
 									Str("folder", m.name).
@@ -1313,13 +1836,10 @@ func (m *Mailbox) UpdateMessagesFlags(uid bool, seqSet *imap.SeqSet, op imap.Fla
 			Strs("new_flags", newFlags).
 			Msg("IMAP UpdateMessagesFlags: 更新标志")
 
-		// 更新存储
-		if err := m.storage.UpdateMailFlags(ctx, mail.ID, newFlags); err != nil {
-			return fmt.Errorf("更新邮件标志失败: %w", err)
+		// 使用辅助函数更新标志并移动文件
+		if err := m.updateMailFlagsAndMove(ctx, mail, newFlags); err != nil {
+			return err
 		}
-
-		// 更新内存中的标志
-		mail.Flags = newFlags
 	}
 
 	return nil
