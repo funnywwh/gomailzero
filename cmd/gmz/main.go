@@ -153,11 +153,17 @@ func main() {
 
 	// 启动 IMAP 服务器
 	if cfg.IMAP.Enabled {
+		// IMAP 服务器需要 TLS 配置（如果 TLS 已启用但加载失败，记录警告）
+		if cfg.TLS.Enabled && tlsConfig == nil {
+			log.Warn().Msg("TLS 已启用但配置加载失败，IMAP 服务器将允许非安全连接（仅用于开发环境）")
+		}
+		
 		imapServer := imapd.NewServer(&imapd.Config{
 			Enabled: cfg.IMAP.Enabled,
 			Port:    cfg.IMAP.Port,
 			TLS:     tlsConfig,
 			Storage: storageDriver,
+			Maildir: maildir, // 传递 Maildir 实例以支持读取邮件体
 			Auth:    imapd.NewDefaultAuthenticator(storageDriver),
 		})
 

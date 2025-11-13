@@ -244,14 +244,41 @@ func (c *Client) SendMailToRelay(ctx context.Context, relayHost string, relayPor
 			if err := client.StartTLS(config); err != nil {
 				return fmt.Errorf("STARTTLS 失败: %w", err)
 			}
+			// STARTTLS 后需要重新发送 EHLO 以获取新的扩展列表
+			if err := client.Hello(ehloHostname); err != nil {
+				return fmt.Errorf("STARTTLS 后 EHLO 失败: %w", err)
+			}
 		}
 	}
 
 	// 认证（如果提供了用户名和密码）
 	if username != "" && password != "" {
-		auth := smtp.PlainAuth("", username, password, relayHost)
-		if err := client.Auth(auth); err != nil {
-			return fmt.Errorf("SMTP 认证失败: %w", err)
+		// 检查服务器是否支持 AUTH 扩展（STARTTLS 后需要重新检查）
+		supportsAuth, authMethods := client.Extension("AUTH")
+		if !supportsAuth {
+			logger.WarnCtx(ctx).Msg("中继服务器不支持 AUTH 扩展，跳过认证")
+		} else {
+			logger.DebugCtx(ctx).Str("auth_methods", authMethods).Msg("中继服务器支持的认证方式")
+
+			// 优先使用 PLAIN 认证（最常见）
+			// 如果服务器不支持 PLAIN，尝试其他方式
+			var auth smtp.Auth
+			if strings.Contains(authMethods, "PLAIN") {
+				auth = smtp.PlainAuth("", username, password, relayHost)
+			} else if strings.Contains(authMethods, "LOGIN") {
+				// 如果服务器只支持 LOGIN，使用 PLAIN 作为后备（LOGIN 是 PLAIN 的变体）
+				auth = smtp.PlainAuth("", username, password, relayHost)
+			} else {
+				// 如果都不支持，尝试使用 PLAIN（某些服务器可能支持但不声明）
+				logger.WarnCtx(ctx).Str("supported_auths", authMethods).Msg("服务器不支持 PLAIN 或 LOGIN，尝试使用 PLAIN")
+				auth = smtp.PlainAuth("", username, password, relayHost)
+			}
+
+			if err := client.Auth(auth); err != nil {
+				// 提供更详细的错误信息，帮助排查认证问题
+				return fmt.Errorf("SMTP 认证失败 (服务器支持的认证方式: %s): %w", authMethods, err)
+			}
+			logger.DebugCtx(ctx).Str("username", username).Msg("SMTP 认证成功")
 		}
 	}
 

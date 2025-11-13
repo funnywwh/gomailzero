@@ -33,6 +33,9 @@ export const api = {
   login: (data: { email: string; password: string; totp_code?: string }) =>
     apiClient.post('/login', data),
 
+  // 获取当前用户信息
+  getCurrentUser: () => apiClient.get('/me'),
+
   // 获取邮件列表
   getMails: (folder?: string, limit?: number, offset?: number) =>
     apiClient.get('/mails', { params: { folder, limit, offset } }),

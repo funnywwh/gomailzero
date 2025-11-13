@@ -3,6 +3,7 @@
     <header class="header">
       <h1>邮件</h1>
       <div class="header-actions">
+        <span v-if="currentUser" class="user-info">{{ currentUser.email }}</span>
         <input
           v-model="searchQuery"
           @keyup.enter="handleSearch"
@@ -89,6 +90,7 @@ const selectedMails = ref<Set<string>>(new Set())
 const page = ref(1)
 const pageSize = ref(20)
 const totalMails = ref(0)
+const currentUser = ref<{ email: string; quota?: number } | null>(null)
 
 const loadMails = async () => {
   loading.value = true
@@ -260,7 +262,17 @@ const getDisplayAddress = (mail: any) => {
   }
 }
 
+const loadCurrentUser = async () => {
+  try {
+    const response = await api.getCurrentUser()
+    currentUser.value = response.user || null
+  } catch (err: any) {
+    console.error('获取用户信息失败:', err)
+  }
+}
+
 onMounted(() => {
+  loadCurrentUser()
   loadFolders()
   loadMails()
 })
@@ -291,6 +303,15 @@ onMounted(() => {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+}
+
+.user-info {
+  padding: 0.5rem 1rem;
+  background: #f5f5f5;
+  border-radius: 4px;
+  color: #666;
+  font-size: 0.875rem;
+  margin-right: 0.5rem;
 }
 
 .search-input {

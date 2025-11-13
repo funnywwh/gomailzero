@@ -153,7 +153,7 @@ func (s *Session) Data(r io.Reader) error {
 			To:         []string{recipient},
 			Subject:    subject,
 			Size:       int64(len(body)),
-			Flags:      []string{},
+			Flags:      []string{"\\Recent"}, // 新邮件设置 \Recent 标志
 			ReceivedAt: time.Now(),
 		}
 

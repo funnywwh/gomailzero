@@ -347,9 +347,23 @@ func sendMailHandler(driver storage.Driver, maildir *storage.Maildir, relayConfi
 			// 是本地用户，投递到收件箱
 			localRecipients = append(localRecipients, recipient)
 			if maildir != nil {
-				if err := maildir.EnsureUserMaildir(user.Email); err == nil {
+				if err := maildir.EnsureUserMaildir(user.Email); err != nil {
+					logger.ErrorCtx(ctx).
+						Err(err).
+						Str("recipient", recipient).
+						Str("user_email", user.Email).
+						Msg("创建用户 Maildir 失败")
+					continue
+				}
 					filename, err := maildir.StoreMail(user.Email, "INBOX", mailData)
-					if err == nil {
+				if err != nil {
+					logger.ErrorCtx(ctx).
+						Err(err).
+						Str("recipient", recipient).
+						Str("user_email", user.Email).
+						Msg("存储邮件到 Maildir 失败")
+					continue
+				}
 						// 存储邮件元数据到数据库
 						inboxMail := &storage.Mail{
 							ID:         filename,
@@ -361,15 +375,26 @@ func sendMailHandler(driver storage.Driver, maildir *storage.Maildir, relayConfi
 							Bcc:        req.Bcc,
 							Subject:    req.Subject,
 							Size:       int64(len(mailData)),
-							Flags:      []string{},
+					Flags:      []string{"\\Recent"}, // 新邮件设置 \Recent 标志
 							ReceivedAt: time.Now(),
 							CreatedAt:  time.Now(),
 						}
-						if err := driver.StoreMail(ctx, inboxMail); err == nil {
-							// 本地投递成功
+				if err := driver.StoreMail(ctx, inboxMail); err != nil {
+					logger.ErrorCtx(ctx).
+						Err(err).
+						Str("recipient", recipient).
+						Str("user_email", user.Email).
+						Msg("存储邮件元数据到数据库失败")
+				} else {
+					logger.InfoCtx(ctx).
+						Str("from", from).
+						Str("to", recipient).
+						Msg("内部邮件投递成功")
 						}
-					}
-				}
+			} else {
+				logger.WarnCtx(ctx).
+					Str("recipient", recipient).
+					Msg("Maildir 未配置，无法投递内部邮件")
 			}
 		}
 
@@ -543,6 +568,39 @@ func searchMailsHandler(driver storage.Driver) gin.HandlerFunc {
 
 		c.JSON(http.StatusOK, gin.H{
 			"mails": mails,
+		})
+	}
+}
+
+// getCurrentUserHandler 获取当前用户信息
+func getCurrentUserHandler(driver storage.Driver) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userEmail, exists := c.Get("user_email")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "未授权",
+			})
+			c.Abort()
+			return
+		}
+
+		email := userEmail.(string)
+		ctx := c.Request.Context()
+		user, err := driver.GetUser(ctx, email)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "获取用户信息失败",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"user": gin.H{
+				"email":    user.Email,
+				"quota":    user.Quota,
+				"active":   user.Active,
+				"is_admin": user.IsAdmin,
+			},
 		})
 	}
 }

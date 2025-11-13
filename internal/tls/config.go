@@ -35,7 +35,8 @@ func LoadTLSConfig(cfg *config.TLSConfig) (*tls.Config, error) {
 	case "1.2":
 		tlsConfig.MinVersion = tls.VersionTLS12
 	default:
-		tlsConfig.MinVersion = tls.VersionTLS13
+		// 默认使用 TLS 1.2（兼容更多客户端）
+		tlsConfig.MinVersion = tls.VersionTLS12
 	}
 
 	// 如果启用了 ACME，证书将由 ACME 客户端管理

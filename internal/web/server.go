@@ -63,11 +63,29 @@ func NewServer(cfg *Config) *Server {
 		router.StaticFS("/assets", http.FS(assetsFS))
 	}
 
+	// 创建 JWT 管理器
+	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTIssuer)
+
 	// 管理界面代理（代理到管理 API 服务器）
+	// 注意：必须在 WebMail API 路由之前注册，确保 /api/v1 优先匹配
 	if cfg.AdminPort > 0 {
 		adminURL, err := url.Parse(fmt.Sprintf("http://localhost:%d", cfg.AdminPort))
 		if err == nil {
 			proxy := httputil.NewSingleHostReverseProxy(adminURL)
+
+			// 修改请求路径，确保代理到正确的后端路径
+			originalDirector := proxy.Director
+			proxy.Director = func(req *http.Request) {
+				originalDirector(req)
+				// 保持原始路径不变（后端已经配置了 /admin 路由）
+			}
+
+			// 代理管理 API 请求（/api/v1/*）- 必须在 WebMail API 之前
+			apiV1Group := router.Group("/api/v1")
+			apiV1Group.Any("/*path", func(c *gin.Context) {
+				proxy.ServeHTTP(c.Writer, c.Request)
+			})
+
 			// 代理管理界面静态资源
 			router.Any("/admin", func(c *gin.Context) {
 				proxy.ServeHTTP(c.Writer, c.Request)
@@ -75,19 +93,10 @@ func NewServer(cfg *Config) *Server {
 			router.Any("/admin/*path", func(c *gin.Context) {
 				proxy.ServeHTTP(c.Writer, c.Request)
 			})
-			// 代理管理 API 请求（/api/v1/*）
-			// 使用 NoRoute 或者更精确的路由匹配
-			apiV1Group := router.Group("/api/v1")
-			apiV1Group.Any("/*path", func(c *gin.Context) {
-				proxy.ServeHTTP(c.Writer, c.Request)
-			})
 		}
 	}
 
-	// 创建 JWT 管理器
-	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.JWTIssuer)
-
-	// API 路由
+	// API 路由（WebMail API，注意 /api/v1 已经在上面被代理了）
 	api := router.Group("/api")
 	{
 		// 公开端点（不需要认证）
@@ -98,6 +107,7 @@ func NewServer(cfg *Config) *Server {
 		// 需要认证的端点
 		api.Use(jwtMiddleware(jwtManager, cfg.Storage))
 		{
+			api.GET("/me", getCurrentUserHandler(cfg.Storage)) // 获取当前用户信息
 			api.GET("/mails", listMailsHandler(cfg.Storage))
 			api.GET("/mails/search", searchMailsHandler(cfg.Storage))
 			api.GET("/mails/:id", getMailHandler(cfg.Storage, cfg.Maildir))
@@ -121,9 +131,9 @@ func NewServer(cfg *Config) *Server {
 
 	// SPA 路由（所有其他路由返回 index.html）
 	router.NoRoute(func(c *gin.Context) {
-		// 排除 API 和静态资源路径
+		// 排除 API、静态资源和管理界面路径
 		path := c.Request.URL.Path
-		if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/static") || strings.HasPrefix(path, "/assets") {
+		if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/static") || strings.HasPrefix(path, "/assets") || strings.HasPrefix(path, "/admin") {
 			c.Status(http.StatusNotFound)
 			return
 		}
