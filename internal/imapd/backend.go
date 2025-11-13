@@ -885,43 +885,23 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 	for i, item := range items {
 		itemNames[i] = string(item)
 	}
+	// 记录 seqSet 信息以便调试
+	seqSetStr := "nil"
+	if seqSet != nil {
+		seqSetStr = seqSet.String()
+	}
 	logger.Debug().
 		Str("user", m.userEmail).
 		Str("folder", m.name).
 		Int("mail_count", len(m.mails)).
 		Bool("uid", uid).
+		Str("seq_set", seqSetStr).
 		Strs("requested_items", itemNames).
 		Msg("IMAP ListMessages: 开始列出邮件")
 
-		// 如果客户端只请求了 UID，为了兼容性，也返回基本字段（Envelope、Flags、InternalDate、RFC822Size）
-		// 这不符合严格的 IMAP 规范，但有助于某些客户端正确显示邮件列表
-		hasOnlyUID := len(items) == 1 && items[0] == imap.FetchUid
-		if hasOnlyUID {
-			logger.Debug().
-				Str("user", m.userEmail).
-				Str("folder", m.name).
-				Msg("IMAP ListMessages: 客户端只请求了 UID，添加基本字段以兼容")
-			// 添加基本字段到 items 列表
-			items = []imap.FetchItem{
-				imap.FetchUid,
-				imap.FetchEnvelope,
-				imap.FetchFlags,
-				imap.FetchInternalDate,
-				imap.FetchRFC822Size,
-			}
-		}
-		
-		// 检查是否请求了 FLAGS，如果没有，也添加 FLAGS（某些客户端需要）
-		hasFlags := false
-		for _, item := range items {
-			if item == imap.FetchFlags {
-				hasFlags = true
-				break
-			}
-		}
-		if !hasFlags {
-			items = append(items, imap.FetchFlags)
-		}
+		// 严格按照 IMAP 规范，只返回客户端请求的字段
+		// 如果客户端需要更多字段，它会再次请求（如 UID FETCH 1:15 (UID RFC822.SIZE FLAGS BODY.PEEK[HEADER])）
+		// 不要添加额外字段，避免响应过大和字段顺序不一致导致客户端解析失败
 		
 		// 检查是否请求了 BODY 但没有请求 Envelope，如果是，也添加 Envelope
 		hasBodyRequest := false
@@ -946,17 +926,23 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 
 	for i, mail := range m.mails {
 		// #nosec G115 -- 循环索引 i 在合理范围内，不会溢出 uint32
+		// 序列号始终是 i+1（从 1 开始）
 		seqNum := uint32(i + 1)
-		if uid {
-			// #nosec G115 -- 循环索引 i 在合理范围内，不会溢出 uint32
-			seqNum = uint32(i + 1) // TODO: 使用实际的 UID
-		}
+		
+		// 确定用于匹配 seqSet 的数值
+		// - 如果 uid=false（普通 FETCH），seqSet 包含序列号，使用 seqNum 匹配
+		// - 如果 uid=true（UID FETCH），seqSet 包含 UID 值，使用 UID 匹配
+		// 目前我们使用序列号作为 UID（TODO: 使用实际的 UID），所以两种情况都使用 seqNum
+		checkNum := seqNum
 
-		if seqSet != nil && !seqSet.Contains(seqNum) {
+		if seqSet != nil && !seqSet.Contains(checkNum) {
 			logger.Debug().
 				Str("user", m.userEmail).
 				Str("folder", m.name).
 				Uint32("seq_num", seqNum).
+				Uint32("check_num", checkNum).
+				Bool("uid", uid).
+				Str("seq_set", seqSet.String()).
 				Str("mail_id", mail.ID).
 				Msg("IMAP ListMessages: 邮件不在序列集中，跳过")
 			continue
@@ -974,6 +960,10 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 			BodyStructure: nil, // 需要在使用时初始化
 			Body:         make(map[*imap.BodySectionName]imap.Literal), // 用于存储 BODY.PEEK[1] 等请求
 		}
+		
+		// 预先设置 UID（必须在填充其他字段之前设置，确保 UID 在响应中正确显示）
+		// go-imap 库在格式化 FETCH 响应时，会优先显示 UID（如果存在）
+		msg.Uid = seqNum // TODO: 使用实际的 UID
 		
 		// 预先填充 Envelope（即使客户端没有请求，也填充以便客户端从邮件头解析时使用）
 		// 解析 From 地址
@@ -1353,6 +1343,22 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 						literal := bytes.NewReader(literalData)
 						msg.Body[section] = literal
 						msg.Items[item] = literal
+						
+						// 如果客户端请求了 UID，确保 UID 也被包含在响应中
+						// go-imap 库在格式化 FETCH 响应时，需要 UID 在 msg.Items 中才能正确显示
+						// 注意：即使 msg.Uid 已设置（第966行），也必须添加到 msg.Items 中
+						hasUIDRequest := false
+						for _, reqItem := range items {
+							if reqItem == imap.FetchUid {
+								hasUIDRequest = true
+								break
+							}
+						}
+						if hasUIDRequest {
+							// 无论 msg.Items[imap.FetchUid] 是否已设置，都确保设置（因为可能先处理 BODY section）
+							msg.Uid = seqNum // 确保 msg.Uid 已设置
+							msg.Items[imap.FetchUid] = seqNum // 确保 UID 在 Items 中（go-imap 库需要这个）
+						}
 						
 						// 根据 IMAP 规范，如果客户端使用 FETCH（不是 PEEK）获取邮件体，自动设置 \Seen 标志
 						// 为了兼容 Foxmail 等客户端，即使使用 PEEK，也设置 \Seen 标志
