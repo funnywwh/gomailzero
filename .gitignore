@@ -5,7 +5,7 @@ bin/
 *.dll
 *.so
 *.dylib
-gmz
+/gmz
 
 # Test binary, built with `go test -c`
 *.test
