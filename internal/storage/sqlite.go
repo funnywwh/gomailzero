@@ -24,7 +24,7 @@ func NewSQLiteDriver(dsn string) (*SQLiteDriver, error) {
 	if dsn != ":memory:" && !strings.HasPrefix(dsn, "file:") {
 		dir := filepath.Dir(dsn)
 		if dir != "." && dir != "" {
-			if err := os.MkdirAll(dir, 0755); err != nil {
+			if err := os.MkdirAll(dir, 0750); err != nil { // 使用 0750 权限（仅所有者可读写执行，组可读执行）
 				return nil, fmt.Errorf("创建数据库目录失败: %w", err)
 			}
 		}

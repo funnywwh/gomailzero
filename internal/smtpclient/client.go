@@ -142,7 +142,9 @@ func (c *Client) sendToDomain(ctx context.Context, from, domain string, recipien
 	// 检查是否支持 STARTTLS
 	if ok, _ := client.Extension("STARTTLS"); ok {
 		config := &tls.Config{
-			ServerName: mxHost,
+			ServerName:         mxHost,
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: false,
 		}
 		if err := client.StartTLS(config); err != nil {
 			logger.WarnCtx(ctx).Err(err).Str("mx_host", mxHost).Msg("STARTTLS 失败，继续发送")
@@ -172,7 +174,7 @@ func (c *Client) sendToDomain(ctx context.Context, from, domain string, recipien
 
 	// 写入邮件数据
 	if _, err := writer.Write(data); err != nil {
-		writer.Close()
+		_ = writer.Close() // #nosec G104 -- 关闭失败不影响返回错误
 		return fmt.Errorf("写入邮件数据失败: %w", err)
 	}
 
@@ -211,7 +213,9 @@ func (c *Client) SendMailToRelay(ctx context.Context, relayHost string, relayPor
 	// 如果使用 TLS，直接建立 TLS 连接
 	if useTLS && relayPort == 465 {
 		conn, err = tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{
-			ServerName: relayHost,
+			ServerName:         relayHost,
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: false,
 		})
 	} else {
 		conn, err = dialer.DialContext(ctx, "tcp", addr)
@@ -239,7 +243,9 @@ func (c *Client) SendMailToRelay(ctx context.Context, relayHost string, relayPor
 	if useTLS && relayPort != 465 {
 		if ok, _ := client.Extension("STARTTLS"); ok {
 			config := &tls.Config{
-				ServerName: relayHost,
+				ServerName:         relayHost,
+				MinVersion:         tls.VersionTLS12,
+				InsecureSkipVerify: false,
 			}
 			if err := client.StartTLS(config); err != nil {
 				return fmt.Errorf("STARTTLS 失败: %w", err)
@@ -302,7 +308,7 @@ func (c *Client) SendMailToRelay(ctx context.Context, relayHost string, relayPor
 
 	// 写入邮件数据
 	if _, err := writer.Write(data); err != nil {
-		writer.Close()
+		_ = writer.Close() // #nosec G104 -- 关闭失败不影响返回错误
 		return fmt.Errorf("写入邮件数据失败: %w", err)
 	}
 

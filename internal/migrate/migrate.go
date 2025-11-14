@@ -128,7 +128,7 @@ func createFilteredMigrationsDir(sourceDir string) (string, error) {
 	// 读取源目录中的所有文件
 	entries, err := os.ReadDir(sourceDir)
 	if err != nil {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir) // #nosec G104 -- 清理失败不影响返回错误
 		return "", fmt.Errorf("读取迁移目录失败: %w", err)
 	}
 
@@ -146,16 +146,23 @@ func createFilteredMigrationsDir(sourceDir string) (string, error) {
 
 		// 读取源文件
 		sourcePath := filepath.Join(sourceDir, fileName)
-		data, err := os.ReadFile(sourcePath)
+		// 验证路径，防止目录遍历攻击
+		cleanPath := filepath.Clean(sourcePath)
+		cleanSourceDir := filepath.Clean(sourceDir)
+		if !strings.HasPrefix(cleanPath, cleanSourceDir+string(filepath.Separator)) && cleanPath != cleanSourceDir {
+			_ = os.RemoveAll(tmpDir) // #nosec G104 -- 清理失败不影响返回错误
+			return "", fmt.Errorf("无效的迁移文件路径: %s", sourcePath)
+		}
+		data, err := os.ReadFile(cleanPath) // #nosec G304 -- 路径已验证
 		if err != nil {
-			os.RemoveAll(tmpDir)
+			_ = os.RemoveAll(tmpDir) // #nosec G104 -- 清理失败不影响返回错误
 			return "", fmt.Errorf("读取迁移文件失败 %s: %w", sourcePath, err)
 		}
 
 		// 写入临时目录
 		targetPath := filepath.Join(tmpDir, fileName)
-		if err := os.WriteFile(targetPath, data, 0644); err != nil {
-			os.RemoveAll(tmpDir)
+		if err := os.WriteFile(targetPath, data, 0600); err != nil { // 使用 0600 权限（仅所有者可读写）
+			_ = os.RemoveAll(tmpDir) // #nosec G104 -- 清理失败不影响返回错误
 			return "", fmt.Errorf("写入临时文件失败 %s: %w", targetPath, err)
 		}
 	}

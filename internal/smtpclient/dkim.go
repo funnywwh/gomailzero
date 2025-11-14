@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gomailzero/gmz/internal/antispam"
 	"github.com/gomailzero/gmz/internal/config"
@@ -30,7 +31,13 @@ func LoadDKIM(cfg *config.DKIMConfig, domain, workDir string) (*antispam.DKIM, e
 		keyPath = filepath.Join(workDir, keyPath)
 	}
 
-	keyData, err := os.ReadFile(keyPath)
+	// 验证路径，防止目录遍历攻击
+	keyPath = filepath.Clean(keyPath)
+	if strings.Contains(keyPath, "..") {
+		return nil, fmt.Errorf("无效的私钥路径: %s", keyPath)
+	}
+
+	keyData, err := os.ReadFile(keyPath) // #nosec G304 -- 路径已验证，来自配置
 	if err != nil {
 		return nil, fmt.Errorf("读取 DKIM 私钥文件失败: %w", err)
 	}

@@ -236,12 +236,24 @@ func (m *MockStorage) ListMails(ctx context.Context, userEmail string, folder st
 	return nil, nil
 }
 
+func (m *MockStorage) GetMailBody(ctx context.Context, userEmail string, folder string, mailID string) ([]byte, error) {
+	return nil, fmt.Errorf("未实现")
+}
+
 func (m *MockStorage) DeleteMail(ctx context.Context, id string) error {
 	return nil
 }
 
 func (m *MockStorage) UpdateMailFlags(ctx context.Context, id string, flags []string) error {
 	return nil
+}
+
+func (m *MockStorage) SearchMails(ctx context.Context, userEmail string, query string, folder string, limit, offset int) ([]*storage.Mail, error) {
+	return nil, nil
+}
+
+func (m *MockStorage) ListFolders(ctx context.Context, userEmail string) ([]string, error) {
+	return nil, nil
 }
 
 func (m *MockStorage) GetQuota(ctx context.Context, userEmail string) (*storage.Quota, error) {

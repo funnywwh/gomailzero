@@ -214,6 +214,10 @@ func (m *MockStorageDriver) GetMail(ctx context.Context, id string) (*storage.Ma
 	return nil, nil
 }
 
+func (m *MockStorageDriver) GetMailBody(ctx context.Context, userEmail string, folder string, mailID string) ([]byte, error) {
+	return nil, nil
+}
+
 func (m *MockStorageDriver) ListMails(ctx context.Context, userEmail string, folder string, limit, offset int) ([]*storage.Mail, error) {
 	return []*storage.Mail{}, nil
 }
@@ -226,6 +230,14 @@ func (m *MockStorageDriver) UpdateMailFlags(ctx context.Context, id string, flag
 	return nil
 }
 
+func (m *MockStorageDriver) SearchMails(ctx context.Context, userEmail string, query string, folder string, limit, offset int) ([]*storage.Mail, error) {
+	return []*storage.Mail{}, nil
+}
+
+func (m *MockStorageDriver) ListFolders(ctx context.Context, userEmail string) ([]string, error) {
+	return []string{"INBOX"}, nil
+}
+
 func (m *MockStorageDriver) GetQuota(ctx context.Context, userEmail string) (*storage.Quota, error) {
 	return &storage.Quota{
 		UserEmail: userEmail,
@@ -236,6 +248,22 @@ func (m *MockStorageDriver) GetQuota(ctx context.Context, userEmail string) (*st
 
 func (m *MockStorageDriver) UpdateQuota(ctx context.Context, userEmail string, quota *storage.Quota) error {
 	return nil
+}
+
+func (m *MockStorageDriver) SaveTOTPSecret(ctx context.Context, userEmail string, secret string) error {
+	return nil
+}
+
+func (m *MockStorageDriver) GetTOTPSecret(ctx context.Context, userEmail string) (string, error) {
+	return "", nil
+}
+
+func (m *MockStorageDriver) DeleteTOTPSecret(ctx context.Context, userEmail string) error {
+	return nil
+}
+
+func (m *MockStorageDriver) IsTOTPEnabled(ctx context.Context, userEmail string) (bool, error) {
+	return false, nil
 }
 
 func (m *MockStorageDriver) Close() error {

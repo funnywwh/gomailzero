@@ -336,7 +336,10 @@ func (s *Session) buildCompleteEmail(fromHeader, to, subject string, body []byte
 		// 如果没找到 boundary，生成一个
 		if !boundaryFound {
 			randomBytes := make([]byte, 8)
-			rand.Read(randomBytes)
+			if _, err := rand.Read(randomBytes); err != nil { // #nosec G104 -- 随机数生成失败不影响功能
+				// 如果随机数生成失败，使用时间戳作为后备
+				randomBytes = []byte(fmt.Sprintf("%d", time.Now().UnixNano()))
+			}
 			random := hex.EncodeToString(randomBytes)
 			buf.WriteString(fmt.Sprintf("_%s_", random))
 		}
@@ -359,7 +362,10 @@ func (s *Session) buildCompleteEmail(fromHeader, to, subject string, body []byte
 func (s *Session) generateMessageID() string {
 	// 生成随机数
 	randomBytes := make([]byte, 8)
-	rand.Read(randomBytes)
+	if _, err := rand.Read(randomBytes); err != nil { // #nosec G104 -- 随机数生成失败不影响功能
+		// 如果随机数生成失败，使用时间戳作为后备
+		randomBytes = []byte(fmt.Sprintf("%d", time.Now().UnixNano()))
+	}
 	random := hex.EncodeToString(randomBytes)
 	
 	// 获取主机名

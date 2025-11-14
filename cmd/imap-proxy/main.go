@@ -73,6 +73,7 @@ func NewProxy() (*Proxy, error) {
 			}
 			p.clientTLSConfig = &tls.Config{
 				Certificates: []tls.Certificate{cert},
+				MinVersion:   tls.VersionTLS12,
 			}
 			p.logger = log.New(os.Stderr, "", log.LstdFlags)
 			p.logger.Printf("警告: 使用自签名证书，客户端需要接受不受信任的证书")
@@ -84,6 +85,7 @@ func NewProxy() (*Proxy, error) {
 			}
 			p.clientTLSConfig = &tls.Config{
 				Certificates: []tls.Certificate{cert},
+				MinVersion:   tls.VersionTLS12,
 			}
 		}
 	}
@@ -94,7 +96,7 @@ func NewProxy() (*Proxy, error) {
 	// 如果启用自动日志且未指定日志文件，自动生成文件名
 	if *autoLog && logPath == "" {
 		// 确保日志目录存在
-		if err := os.MkdirAll(*logDir, 0755); err != nil {
+		if err := os.MkdirAll(*logDir, 0750); err != nil { // 使用 0750 权限（仅所有者可读写执行，组可读执行）
 			return nil, fmt.Errorf("创建日志目录失败: %w", err)
 		}
 
@@ -105,11 +107,17 @@ func NewProxy() (*Proxy, error) {
 
 	if logPath != "" {
 		// 确保日志文件所在目录存在
-		if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(logPath), 0750); err != nil { // 使用 0750 权限（仅所有者可读写执行，组可读执行）
 			return nil, fmt.Errorf("创建日志目录失败: %w", err)
 		}
 
-		file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		// 验证日志路径，防止目录遍历攻击
+		cleanLogPath := filepath.Clean(logPath)
+		if strings.Contains(cleanLogPath, "..") {
+			return nil, fmt.Errorf("无效的日志路径: %s", logPath)
+		}
+
+		file, err := os.OpenFile(cleanLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600) // #nosec G304,G302 -- 路径已验证，使用 0600 权限（仅所有者可读写）
 		if err != nil {
 			return nil, fmt.Errorf("打开日志文件失败: %w", err)
 		}
@@ -231,7 +239,8 @@ func (p *Proxy) handleConnection(clientConn net.Conn) {
 	if p.useTLS {
 		// TLS 连接
 		tlsConfig := &tls.Config{
-			InsecureSkipVerify: p.insecureTLS,
+			InsecureSkipVerify: p.insecureTLS, // #nosec G402 -- 允许用户配置跳过验证（用于测试环境）
+			MinVersion:         tls.VersionTLS12,
 		}
 		serverConn, err = tls.DialWithDialer(
 			&net.Dialer{Timeout: 10 * time.Second},

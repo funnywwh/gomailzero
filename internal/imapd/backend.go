@@ -1142,9 +1142,12 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 					Msg("IMAP ListMessages: 填充 InternalDate")
 			case imap.FetchRFC822Size:
 				// go-imap 库从 msg.Size 字段读取（需要转换为 uint32）
-				size := uint32(mail.Size)
-				if mail.Size > 0 && size == 0 {
-					// 如果转换后为 0 但原始值不为 0，使用最大值
+				// #nosec G115 -- 检查溢出，如果超过 uint32 最大值则使用最大值
+				var size uint32
+				if mail.Size > 0 && mail.Size <= int64(^uint32(0)) {
+					size = uint32(mail.Size)
+				} else if mail.Size > int64(^uint32(0)) {
+					// 如果超过 uint32 最大值，使用最大值
 					size = ^uint32(0)
 				}
 				msg.Size = size
@@ -1170,10 +1173,17 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 				// go-imap 库从 msg.BodyStructure 字段读取，需要初始化
 				if msg.BodyStructure == nil {
 					// 创建一个简单的 BodyStructure（文本/纯文本）
+					// #nosec G115 -- 检查溢出，如果超过 uint32 最大值则使用最大值
+					var size uint32
+					if mail.Size > 0 && mail.Size <= int64(^uint32(0)) {
+						size = uint32(mail.Size)
+					} else if mail.Size > int64(^uint32(0)) {
+						size = ^uint32(0)
+					}
 					msg.BodyStructure = &imap.BodyStructure{
 						MIMEType:    "text",
 						MIMESubType: "plain",
-						Size:        uint32(mail.Size),
+						Size:        size,
 					}
 				}
 				msg.BodyStructure.Extended = item == imap.FetchBodyStructure
