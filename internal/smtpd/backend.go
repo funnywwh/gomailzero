@@ -60,28 +60,13 @@ func (s *Session) Mail(from string, opts *smtp.MailOptions) error {
 // Rcpt 设置收件人（检查中继）
 func (s *Session) Rcpt(to string, opts *smtp.RcptOptions) error {
 	// 提取域名
-	parts := strings.Split(to, "@")
-	if len(parts) != 2 {
-		return fmt.Errorf("无效的邮箱地址: %s", to)
-	}
-	domain := parts[1]
+	parts := strings.Split(to, "@")[1]
 
 	// 检查域名是否存在
 	ctx := context.Background()
-	_, err := s.backend.storage.GetDomain(ctx, domain)
+	_, err := s.backend.storage.GetDomain(ctx, parts)
 	if err != nil {
-		// 域名不存在，拒绝中继
-		return fmt.Errorf("550 Relay denied: domain not found")
-	}
-
-	// 检查用户或别名是否存在
-	_, err = s.backend.storage.GetUser(ctx, to)
-	if err != nil {
-		// 检查别名
-		_, err = s.backend.storage.GetAlias(ctx, to)
-		if err != nil {
-			return fmt.Errorf("550 Relay denied: recipient not found")
-		}
+		return fmt.Errorf("无效的邮箱地址: %s", to)
 	}
 
 	s.recipients = append(s.recipients, to)
@@ -91,17 +76,23 @@ func (s *Session) Rcpt(to string, opts *smtp.RcptOptions) error {
 
 // Data 接收邮件数据
 func (s *Session) Data(r io.Reader) error {
-	// 先读取完整的原始邮件数据
-	rawData, err := io.ReadAll(r)
+	// 限制读取大小以防 OOM
+	const MaxMailSize = 50 * 1024 * 1024 // 50 MiB
+	limited := io.LimitReader(r, MaxMailSize+1)
+	rawData, err := io.ReadAll(limited)
 	if err != nil {
 		return fmt.Errorf("读取邮件数据失败: %w", err)
+	}
+	if int64(len(rawData)) > MaxMailSize {
+		logger.Warn().Int("size", len(rawData)).Msg("邮件超过允许大小，拒绝接收")
+		return fmt.Errorf("552 Message size exceeds fixed maximum message size")
 	}
 
 	// 尝试解析邮件
 	msg, err := message.Read(bytes.NewReader(rawData))
 	if err != nil {
-		// 如果解析失败，可能是缺少邮件头，需要重新构建
-		logger.Warn().Err(err).Msg("邮件解析失败，尝试重新构建邮件头")
+		previewLen := 1024
+		logger.Warn().Err(err).Hex("preview", rawData[:previewLen]).Msg("邮件解析失败，尝试重新构建邮件头")
 	}
 
 	// 解析邮件头
@@ -112,135 +103,85 @@ func (s *Session) Data(r io.Reader) error {
 		fromHeader = header.Get("From")
 		to = header.Get("To")
 		subject = header.Get("Subject")
-		// 检查是否有基本的邮件头
 		hasHeaders = fromHeader != "" || to != "" || subject != "" || header.Get("Date") != "" || header.Get("Message-ID") != ""
 	}
 
-	// 如果邮件缺少邮件头，需要重新构建
-	if !hasHeaders || strings.HasPrefix(strings.TrimSpace(string(rawData)), "This is a multi-part message in MIME format.") {
-		logger.Info().Msg("检测到缺少邮件头的邮件，重新构建完整邮件")
-		
-		// 读取邮件体（如果解析成功）
-		var bodyData []byte
-		if msg != nil {
-			bodyData, _ = io.ReadAll(msg.Body)
-		} else {
-			// 如果解析失败，使用原始数据作为邮件体
-			bodyData = rawData
-		}
-		
-		// 重新构建完整的邮件（包含邮件头）
-		rawData = s.buildCompleteEmail(fromHeader, to, subject, bodyData)
-		
-		// 重新解析邮件以获取正确的邮件头
-		msg, err = message.Read(bytes.NewReader(rawData))
-		if err != nil {
-			logger.Warn().Err(err).Msg("重新构建后的邮件解析失败")
-		} else {
-			header := msg.Header
-			fromHeader = header.Get("From")
-			to = header.Get("To")
-			subject = header.Get("Subject")
-		}
+	// 如果邮件缺少邮件头，重新构建完整的邮件
+	if !hasHeaders {
+		// 使用 buildCompleteEmail 重新构建邮件
+		completeEmail := s.buildCompleteEmail(fromHeader, to, subject, rawData)
+		rawData = completeEmail
+		logger.Debug().Msg("邮件缺少邮件头，已重新构建完整邮件")
 	}
 
-	// 优先使用邮件头中的 From 字段，如果为空或无效才使用 MAIL FROM 命令的值
-	fromAddr := fromHeader
-	if fromAddr == "" || fromAddr == "<>" {
-		fromAddr = s.from
-	}
-	// 如果仍然为空，使用默认值
-	if fromAddr == "" || fromAddr == "<>" {
-		fromAddr = "unknown@unknown"
-	}
-	
-	// 清理 From 地址：去除可能的引号和尖括号
-	fromAddr = strings.TrimSpace(fromAddr)
-	// 如果包含 < >，提取邮箱地址
-	if idx := strings.Index(fromAddr, "<"); idx >= 0 {
-		if idx2 := strings.Index(fromAddr, ">"); idx2 > idx {
-			fromAddr = fromAddr[idx+1 : idx2]
-		}
-	}
-	// 去除引号
-	fromAddr = strings.Trim(fromAddr, "\"")
-	fromAddr = strings.TrimSpace(fromAddr)
-	
-	// 如果清理后仍然为空，使用默认值
-	if fromAddr == "" || fromAddr == "<>" {
-		fromAddr = "unknown@unknown"
-	}
-
-	// 如果 subject 为空，设置默认值
-	if subject == "" {
-		subject = "(无主题)"
-	}
-
-	logger.Info().
-		Str("from_header", fromHeader).
-		Str("from_mail", s.from).
-		Str("from_final", fromAddr).
-		Str("to", to).
-		Str("subject", subject).
-		Int("raw_size", len(rawData)).
-		Msg("接收邮件")
-
-	// 存储邮件
+	// 存储邮件到 Maildir
 	ctx := context.Background()
 	for _, recipient := range s.recipients {
-		// 获取用户
-		user, err := s.backend.storage.GetUser(ctx, recipient)
-		if err != nil {
-			// 检查别名
-			alias, err := s.backend.storage.GetAlias(ctx, recipient)
-			if err != nil {
-				logger.Warn().Str("recipient", recipient).Msg("收件人不存在")
-				continue
-			}
-			user, err = s.backend.storage.GetUser(ctx, alias.To)
-			if err != nil {
-				logger.Warn().Str("recipient", recipient).Msg("别名目标用户不存在")
-				continue
+		// 提取用户邮箱（去除显示名称）
+		userEmail := recipient
+		if idx := strings.Index(recipient, "<"); idx >= 0 {
+			if idx2 := strings.Index(recipient, ">"); idx2 > idx {
+				userEmail = recipient[idx+1 : idx2]
 			}
 		}
+		userEmail = strings.TrimSpace(userEmail)
 
-		// 确保用户 Maildir 目录存在
-		if err := s.backend.maildir.EnsureUserMaildir(user.Email); err != nil {
-			logger.Error().Err(err).Str("user", user.Email).Msg("创建用户 Maildir 失败")
-			continue
+		// 存储到 Maildir
+		if s.backend.maildir != nil {
+			if err := s.backend.maildir.EnsureUserMaildir(userEmail); err != nil {
+				logger.Warn().Err(err).Str("user", userEmail).Msg("创建用户 Maildir 失败")
+				continue
+			}
+			filename, err := s.backend.maildir.StoreMail(userEmail, "INBOX", rawData)
+			if err != nil {
+				logger.Warn().Err(err).Str("user", userEmail).Msg("存储邮件到 Maildir 失败")
+				continue
+			}
+
+			// 解析邮件头以获取元数据
+			msg, err := message.Read(bytes.NewReader(rawData))
+			if err != nil {
+				logger.Warn().Err(err).Str("user", userEmail).Msg("解析邮件失败")
+				continue
+			}
+
+			header := msg.Header
+			from := header.Get("From")
+			toStr := header.Get("To")
+			subject := header.Get("Subject")
+
+			// 解析收件人列表
+			var toList []string
+			if toStr != "" {
+				toList = []string{toStr}
+			} else {
+				toList = []string{userEmail}
+			}
+
+			// 存储邮件元数据到数据库
+			mail := &storage.Mail{
+				ID:         filename,
+				UserEmail:  userEmail,
+				Folder:     "INBOX",
+				From:       from,
+				To:         toList,
+				Subject:    subject,
+				Size:       int64(len(rawData)),
+				Flags:      []string{"\\Recent"},
+				ReceivedAt: time.Now(),
+				CreatedAt:  time.Now(),
+			}
+
+			if err := s.backend.storage.StoreMail(ctx, mail); err != nil {
+				logger.Warn().Err(err).Str("user", userEmail).Msg("存储邮件元数据失败")
+			} else {
+				logger.Info().
+					Str("user", userEmail).
+					Str("from", from).
+					Str("subject", subject).
+					Msg("邮件已存储")
+			}
 		}
-
-		// 存储完整的邮件到 Maildir（包含邮件头）
-		filename, err := s.backend.maildir.StoreMail(user.Email, "INBOX", rawData)
-		if err != nil {
-			logger.Error().Err(err).Str("user", user.Email).Msg("存储邮件到 Maildir 失败")
-			continue
-		}
-
-		// 存储邮件元数据到数据库
-		mail := &storage.Mail{
-			ID:         filename,
-			UserEmail:  user.Email,
-			Folder:     "INBOX",
-			From:       fromAddr, // 使用解析后的发件人地址
-			To:         []string{recipient},
-			Subject:    subject,
-			Size:       int64(len(rawData)),
-			Flags:      []string{"\\Recent"}, // 新邮件设置 \Recent 标志
-			ReceivedAt: time.Now(),
-		}
-
-		if err := s.backend.storage.StoreMail(ctx, mail); err != nil {
-			logger.Error().Err(err).Str("user", user.Email).Msg("存储邮件元数据失败")
-			// 继续处理其他收件人
-			continue
-		}
-
-		logger.Info().
-			Str("recipient", recipient).
-			Str("filename", filename).
-			Int("size", len(rawData)).
-			Msg("邮件存储成功")
 	}
 
 	return nil

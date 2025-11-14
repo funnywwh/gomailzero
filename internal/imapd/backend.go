@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"os"
 	"path/filepath"
@@ -34,25 +35,29 @@ func NewBackend(storage storage.Driver, maildir *storage.Maildir, auth Authentic
 	}
 }
 
+// stableUIDFromID 将字符串 ID 映射为 uint32（临时方案）
+func stableUIDFromID(id string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(id))
+	return h.Sum32()
+}
+
 // Login 登录
 func (b *Backend) Login(conn *imap.ConnInfo, username, password string) (backend.User, error) {
 	ctx := context.Background()
 	user, err := b.auth.Authenticate(ctx, username, password)
 	if err != nil {
-		logger.Warn().Str("username", username).Msg("IMAP 认证失败")
 		return nil, fmt.Errorf("认证失败")
 	}
 
-	logger.Info().Str("username", username).Msg("IMAP 用户登录")
 	return NewUser(b.storage, b.maildir, user), nil
 }
 
 // User IMAP 用户
 type User struct {
 	storage storage.Driver
-	maildir *storage.Maildir // Maildir 实例，用于读取邮件体
-	//nolint:unused // user 字段在 Username()、ListMailboxes() 和 GetMailbox() 方法中被使用
-	user *storage.User
+	maildir *storage.Maildir
+	user    *storage.User
 }
 
 // NewUser 创建用户
@@ -71,28 +76,47 @@ func (u *User) Username() string {
 
 // ListMailboxes 列出邮箱
 func (u *User) ListMailboxes(subscribed bool) ([]backend.Mailbox, error) {
-	// 标准文件夹
-	folders := []string{"INBOX", "Sent", "Drafts", "Trash", "Spam"}
-
-	var mailboxes []backend.Mailbox
 	ctx := context.Background()
-	for _, folder := range folders {
-		mails, err := u.storage.ListMails(ctx, u.user.Email, folder, 1000, 0)
-		if err != nil {
-			// 如果文件夹不存在，创建空邮箱
-			logger.Warn().Err(err).Str("user", u.user.Email).Str("folder", folder).Msg("查询邮件列表失败，创建空邮箱")
-			mails = []*storage.Mail{}
-		} else {
-			// 记录调试信息
-			logger.Debug().
-				Str("user", u.user.Email).
-				Str("folder", folder).
-				Int("mail_count", len(mails)).
-				Msg("IMAP ListMailboxes: 从数据库读取邮件")
-		}
-		mailboxes = append(mailboxes, NewMailbox(u.storage, u.maildir, u.user.Email, folder, mails))
+	
+	// 列出所有文件夹
+	folders, err := u.storage.ListFolders(ctx, u.user.Email)
+	if err != nil {
+		logger.Warn().Err(err).Str("user", u.user.Email).Msg("列出文件夹失败，返回空列表")
+		folders = []string{}
 	}
-
+	
+	// 确保有 INBOX
+	hasInbox := false
+	for _, folder := range folders {
+		if strings.EqualFold(folder, "INBOX") {
+			hasInbox = true
+			break
+		}
+	}
+	if !hasInbox {
+		folders = append([]string{"INBOX"}, folders...)
+	}
+	
+	// 创建邮箱列表
+	mailboxes := make([]backend.Mailbox, 0, len(folders))
+	for _, folder := range folders {
+		// 标准化文件夹名称
+		normalizedName := folder
+		if strings.EqualFold(folder, "INBOX") {
+			normalizedName = "INBOX"
+		}
+		
+		// 列出邮件
+		mails, err := u.storage.ListMails(ctx, u.user.Email, normalizedName, 1000, 0)
+		if err != nil {
+			logger.Warn().Err(err).Str("user", u.user.Email).Str("folder", normalizedName).Msg("列出邮件失败，使用空列表")
+			mails = []*storage.Mail{}
+		}
+		
+		mailbox := NewMailbox(u.storage, u.maildir, u.user.Email, normalizedName, mails)
+		mailboxes = append(mailboxes, mailbox)
+	}
+	
 	return mailboxes, nil
 }
 
@@ -649,7 +673,6 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 
 // CreateMailbox 创建邮箱
 func (u *User) CreateMailbox(name string) error {
-	// TODO: 实现创建邮箱功能
 	return nil
 }
 
