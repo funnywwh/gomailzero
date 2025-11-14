@@ -1325,7 +1325,25 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 			case imap.FetchBody, imap.FetchBodyStructure:
 				// go-imap 库从 msg.BodyStructure 字段读取，需要初始化
 				if msg.BodyStructure == nil {
-					// 创建一个简单的 BodyStructure（文本/纯文本）
+					// 从邮件头中解析 Content-Type 以确定 MIME 类型
+					var bodyData []byte
+					if m.maildir != nil {
+						body, err := m.maildir.ReadMail(m.userEmail, m.name, mail.ID)
+						if err == nil {
+							bodyData = body
+						} else if len(mail.Body) > 0 {
+							bodyData = mail.Body
+						}
+					} else if len(mail.Body) > 0 {
+						bodyData = mail.Body
+					}
+
+					// 解析 Content-Type
+					mimeType, mimeSubType := "text", "plain"
+					if len(bodyData) > 0 {
+						mimeType, mimeSubType = parseContentType(bodyData)
+					}
+
 					// #nosec G115 -- 检查溢出，如果超过 uint32 最大值则使用最大值
 					var size uint32
 					if mail.Size > 0 && mail.Size <= int64(^uint32(0)) {
@@ -1334,8 +1352,8 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 						size = ^uint32(0)
 					}
 					msg.BodyStructure = &imap.BodyStructure{
-						MIMEType:    "text",
-						MIMESubType: "plain",
+						MIMEType:    mimeType,
+						MIMESubType: mimeSubType,
 						Size:        size,
 					}
 				}
@@ -1346,6 +1364,8 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 					Str("folder", m.name).
 					Str("mail_id", mail.ID).
 					Str("item", string(item)).
+					Str("mime_type", msg.BodyStructure.MIMEType).
+					Str("mime_subtype", msg.BodyStructure.MIMESubType).
 					Msg("IMAP ListMessages: 填充 BodyStructure")
 			case imap.FetchRFC822, imap.FetchRFC822Text:
 				// 从 Maildir 读取邮件体
@@ -2285,4 +2305,58 @@ func parseEmailAddress(email string) (mailbox, host string) {
 	mailbox = email[:idx]
 	host = email[idx+1:]
 	return mailbox, host
+}
+
+// parseContentType 从邮件头中解析 Content-Type，返回 MIME 类型和子类型
+// 如果解析失败，返回默认值 "text/plain"
+func parseContentType(bodyData []byte) (mimeType, mimeSubType string) {
+	// 默认值
+	mimeType = "text"
+	mimeSubType = "plain"
+
+	// 尝试使用 message.Read 解析邮件头
+	msg, err := message.Read(bytes.NewReader(bodyData))
+	if err == nil {
+		contentType := msg.Header.Get("Content-Type")
+		if contentType != "" {
+			// 解析 Content-Type，格式通常是 "text/plain" 或 "text/html; charset=UTF-8"
+			// 提取 MIME 类型和子类型
+			parts := strings.Split(contentType, ";")
+			if len(parts) > 0 {
+				mimeParts := strings.Split(strings.TrimSpace(parts[0]), "/")
+				if len(mimeParts) == 2 {
+					mimeType = strings.ToLower(strings.TrimSpace(mimeParts[0]))
+					mimeSubType = strings.ToLower(strings.TrimSpace(mimeParts[1]))
+				}
+			}
+		}
+		return
+	}
+
+	// 如果 message.Read 失败，尝试手动解析邮件头
+	bodyStr := string(bodyData)
+	lines := strings.Split(bodyStr, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(strings.ToLower(line), "content-type:") {
+			// 提取 Content-Type 值
+			contentType := strings.TrimSpace(line[len("content-type:"):])
+			// 解析 MIME 类型和子类型
+			parts := strings.Split(contentType, ";")
+			if len(parts) > 0 {
+				mimeParts := strings.Split(strings.TrimSpace(parts[0]), "/")
+				if len(mimeParts) == 2 {
+					mimeType = strings.ToLower(strings.TrimSpace(mimeParts[0]))
+					mimeSubType = strings.ToLower(strings.TrimSpace(mimeParts[1]))
+				}
+			}
+			break
+		}
+		// 如果遇到空行，说明邮件头结束
+		if line == "" {
+			break
+		}
+	}
+
+	return
 }
