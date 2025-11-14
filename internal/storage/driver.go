@@ -36,6 +36,7 @@ type Driver interface {
 	UpdateMailFlags(ctx context.Context, id string, flags []string) error
 	SearchMails(ctx context.Context, userEmail string, query string, folder string, limit, offset int) ([]*Mail, error)
 	ListFolders(ctx context.Context, userEmail string) ([]string, error)
+	GetNextUID(ctx context.Context, userEmail, folder string) (uint32, error)
 
 	// 配额管理
 	GetQuota(ctx context.Context, userEmail string) (*Quota, error)
@@ -94,6 +95,7 @@ type Mail struct {
 	Body       []byte    `json:"-"` // 邮件体（加密存储）
 	Size       int64     `json:"size"`
 	Flags      []string  `json:"flags"` // \Seen, \Answered, \Flagged, etc.
+	UID        uint32    `json:"uid"` // IMAP UID（唯一标识符，单调递增）
 	ReceivedAt time.Time `json:"received_at"`
 	CreatedAt  time.Time `json:"created_at"`
 }

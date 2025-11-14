@@ -111,6 +111,7 @@ func (d *SQLiteDriver) initSchema() error {
 		subject TEXT,
 		size INTEGER NOT NULL,
 		flags TEXT,
+		uid INTEGER,
 		received_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -125,6 +126,7 @@ func (d *SQLiteDriver) initSchema() error {
 
 	CREATE INDEX IF NOT EXISTS idx_mails_user_folder ON mails(user_email, folder);
 	CREATE INDEX IF NOT EXISTS idx_mails_received_at ON mails(received_at);
+	CREATE INDEX IF NOT EXISTS idx_mails_uid ON mails(user_email, folder, uid);
 	CREATE INDEX IF NOT EXISTS idx_aliases_from ON aliases(from_addr);
 	CREATE INDEX IF NOT EXISTS idx_aliases_domain ON aliases(domain);
 	`
@@ -479,11 +481,33 @@ func (d *SQLiteDriver) ListAliases(ctx context.Context, domain string) ([]*Alias
 	return aliases, nil
 }
 
+// GetNextUID 获取下一个 UID（为指定邮箱）
+func (d *SQLiteDriver) GetNextUID(ctx context.Context, userEmail, folder string) (uint32, error) {
+	// 获取当前最大 UID
+	query := `SELECT COALESCE(MAX(uid), 0) FROM mails WHERE user_email = ? AND folder = ?`
+	var maxUID uint32
+	err := d.db.QueryRowContext(ctx, query, userEmail, folder).Scan(&maxUID)
+	if err != nil && err != sql.ErrNoRows {
+		return 0, fmt.Errorf("查询最大 UID 失败: %w", err)
+	}
+	// 返回下一个 UID（最大 UID + 1）
+	return maxUID + 1, nil
+}
+
 // StoreMail 存储邮件（仅元数据，邮件体由 Maildir 存储）
 func (d *SQLiteDriver) StoreMail(ctx context.Context, mail *Mail) error {
+	// 如果 UID 为 0，自动分配下一个 UID
+	if mail.UID == 0 {
+		nextUID, err := d.GetNextUID(ctx, mail.UserEmail, mail.Folder)
+		if err != nil {
+			return fmt.Errorf("获取下一个 UID 失败: %w", err)
+		}
+		mail.UID = nextUID
+	}
+
 	query := `
-		INSERT INTO mails (id, user_email, folder, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, size, flags, received_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO mails (id, user_email, folder, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, size, flags, uid, received_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	// 将切片转换为字符串（简单实现，实际应该使用 JSON）
@@ -519,6 +543,7 @@ func (d *SQLiteDriver) StoreMail(ctx context.Context, mail *Mail) error {
 		mail.Subject,
 		mail.Size,
 		flags,
+		mail.UID,
 		receivedAtStr,
 		createdAtStr,
 	)
@@ -531,7 +556,7 @@ func (d *SQLiteDriver) StoreMail(ctx context.Context, mail *Mail) error {
 // GetMail 获取邮件
 func (d *SQLiteDriver) GetMail(ctx context.Context, id string) (*Mail, error) {
 	query := `
-		SELECT id, user_email, folder, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, size, flags, received_at, created_at
+		SELECT id, user_email, folder, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, size, flags, uid, received_at, created_at
 		FROM mails
 		WHERE id = ?
 	`
@@ -540,6 +565,7 @@ func (d *SQLiteDriver) GetMail(ctx context.Context, id string) (*Mail, error) {
 	var mail Mail
 	var toAddrs, ccAddrs, bccAddrs, flags string
 	var receivedAtStr, createdAtStr string
+	var uid sql.NullInt64 // UID 可能为 NULL（旧邮件）
 	err := row.Scan(
 		&mail.ID,
 		&mail.UserEmail,
@@ -551,6 +577,7 @@ func (d *SQLiteDriver) GetMail(ctx context.Context, id string) (*Mail, error) {
 		&mail.Subject,
 		&mail.Size,
 		&flags,
+		&uid,
 		&receivedAtStr,
 		&createdAtStr,
 	)
@@ -559,6 +586,9 @@ func (d *SQLiteDriver) GetMail(ctx context.Context, id string) (*Mail, error) {
 	}
 	if err != nil {
 		return nil, fmt.Errorf("查询邮件失败: %w", err)
+	}
+	if uid.Valid {
+		mail.UID = uint32(uid.Int64)
 	}
 
 	// 解析 to_addrs（用逗号分割）
@@ -624,10 +654,10 @@ func (d *SQLiteDriver) GetMailBody(ctx context.Context, userEmail string, folder
 // ListMails 列出邮件
 func (d *SQLiteDriver) ListMails(ctx context.Context, userEmail string, folder string, limit, offset int) ([]*Mail, error) {
 	query := `
-		SELECT id, user_email, folder, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, size, flags, received_at, created_at
+		SELECT id, user_email, folder, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, size, flags, uid, received_at, created_at
 		FROM mails
 		WHERE user_email = ? AND folder = ?
-		ORDER BY received_at DESC
+		ORDER BY COALESCE(uid, 0) ASC, received_at DESC
 		LIMIT ? OFFSET ?
 	`
 	rows, err := d.db.QueryContext(ctx, query, userEmail, folder, limit, offset)
@@ -641,6 +671,7 @@ func (d *SQLiteDriver) ListMails(ctx context.Context, userEmail string, folder s
 		var mail Mail
 		var toAddrs, ccAddrs, bccAddrs, flags string
 		var receivedAtStr, createdAtStr string
+		var uid sql.NullInt64 // UID 可能为 NULL（旧邮件）
 		if err := rows.Scan(
 			&mail.ID,
 			&mail.UserEmail,
@@ -652,10 +683,14 @@ func (d *SQLiteDriver) ListMails(ctx context.Context, userEmail string, folder s
 			&mail.Subject,
 			&mail.Size,
 			&flags,
+			&uid,
 			&receivedAtStr,
 			&createdAtStr,
 		); err != nil {
 			return nil, fmt.Errorf("扫描邮件失败: %w", err)
+		}
+		if uid.Valid {
+			mail.UID = uint32(uid.Int64)
 		}
 
 		// 解析 to_addrs（用逗号分割）
@@ -747,7 +782,7 @@ func parseTimeString(timeStr string) time.Time {
 // SearchMails 搜索邮件
 func (d *SQLiteDriver) SearchMails(ctx context.Context, userEmail string, query string, folder string, limit, offset int) ([]*Mail, error) {
 	sqlQuery := `
-		SELECT id, user_email, folder, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, size, flags, received_at, created_at
+		SELECT id, user_email, folder, from_addr, to_addrs, cc_addrs, bcc_addrs, subject, size, flags, uid, received_at, created_at
 		FROM mails
 		WHERE user_email = ? AND (subject LIKE ? OR from_addr LIKE ? OR to_addrs LIKE ?)
 	`
@@ -758,7 +793,7 @@ func (d *SQLiteDriver) SearchMails(ctx context.Context, userEmail string, query 
 		args = append(args, folder)
 	}
 
-	sqlQuery += " ORDER BY received_at DESC LIMIT ? OFFSET ?"
+	sqlQuery += " ORDER BY COALESCE(uid, 0) ASC, received_at DESC LIMIT ? OFFSET ?"
 	args = append(args, limit, offset)
 
 	rows, err := d.db.QueryContext(ctx, sqlQuery, args...)
@@ -772,6 +807,7 @@ func (d *SQLiteDriver) SearchMails(ctx context.Context, userEmail string, query 
 		var mail Mail
 		var toAddrs, ccAddrs, bccAddrs, flags string
 		var receivedAtStr, createdAtStr string
+		var uid sql.NullInt64 // UID 可能为 NULL（旧邮件）
 		if err := rows.Scan(
 			&mail.ID,
 			&mail.UserEmail,
@@ -783,10 +819,14 @@ func (d *SQLiteDriver) SearchMails(ctx context.Context, userEmail string, query 
 			&mail.Subject,
 			&mail.Size,
 			&flags,
+			&uid,
 			&receivedAtStr,
 			&createdAtStr,
 		); err != nil {
 			return nil, fmt.Errorf("扫描邮件失败: %w", err)
+		}
+		if uid.Valid {
+			mail.UID = uint32(uid.Int64)
 		}
 
 		// 解析 to_addrs（用逗号分割）

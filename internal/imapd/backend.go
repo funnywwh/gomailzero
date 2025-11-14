@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"os"
 	"path/filepath"
@@ -33,13 +32,6 @@ func NewBackend(storage storage.Driver, maildir *storage.Maildir, auth Authentic
 		maildir: maildir,
 		auth:    auth,
 	}
-}
-
-// stableUIDFromID 将字符串 ID 映射为 uint32（临时方案）
-func stableUIDFromID(id string) uint32 {
-	h := fnv.New32a()
-	h.Write([]byte(id))
-	return h.Sum32()
 }
 
 // Login 登录
@@ -77,14 +69,14 @@ func (u *User) Username() string {
 // ListMailboxes 列出邮箱
 func (u *User) ListMailboxes(subscribed bool) ([]backend.Mailbox, error) {
 	ctx := context.Background()
-	
+
 	// 列出所有文件夹
 	folders, err := u.storage.ListFolders(ctx, u.user.Email)
 	if err != nil {
 		logger.Warn().Err(err).Str("user", u.user.Email).Msg("列出文件夹失败，返回空列表")
 		folders = []string{}
 	}
-	
+
 	// 确保有 INBOX
 	hasInbox := false
 	for _, folder := range folders {
@@ -96,7 +88,7 @@ func (u *User) ListMailboxes(subscribed bool) ([]backend.Mailbox, error) {
 	if !hasInbox {
 		folders = append([]string{"INBOX"}, folders...)
 	}
-	
+
 	// 创建邮箱列表
 	mailboxes := make([]backend.Mailbox, 0, len(folders))
 	for _, folder := range folders {
@@ -105,18 +97,18 @@ func (u *User) ListMailboxes(subscribed bool) ([]backend.Mailbox, error) {
 		if strings.EqualFold(folder, "INBOX") {
 			normalizedName = "INBOX"
 		}
-		
+
 		// 列出邮件
 		mails, err := u.storage.ListMails(ctx, u.user.Email, normalizedName, 1000, 0)
 		if err != nil {
 			logger.Warn().Err(err).Str("user", u.user.Email).Str("folder", normalizedName).Msg("列出邮件失败，使用空列表")
 			mails = []*storage.Mail{}
 		}
-		
+
 		mailbox := NewMailbox(u.storage, u.maildir, u.user.Email, normalizedName, mails)
 		mailboxes = append(mailboxes, mailbox)
 	}
-	
+
 	return mailboxes, nil
 }
 
@@ -158,7 +150,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 			curDir = filepath.Join(userDir, "."+normalizedName, "cur")
 			newDir = filepath.Join(userDir, "."+normalizedName, "new")
 		}
-		
+
 		// 构建数据库中已有的邮件 ID 映射
 		mailIDMap := make(map[string]bool)
 		for _, mail := range mails {
@@ -169,7 +161,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 			mailIDMap[baseID] = true
 			mailIDMap[mail.ID] = true
 		}
-		
+
 		// 检查 cur 目录中的文件，同步缺失的邮件到数据库
 		curEntries, err := os.ReadDir(curDir)
 		if err == nil {
@@ -182,7 +174,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 				if idx := strings.Index(filename, ":"); idx >= 0 {
 					baseID = filename[:idx]
 				}
-				
+
 				// 如果文件不在数据库中，尝试同步
 				if !mailIDMap[baseID] && !mailIDMap[filename] {
 					logger.Debug().
@@ -190,13 +182,13 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 						Str("folder", normalizedName).
 						Str("filename", filename).
 						Msg("IMAP GetMailbox: 发现 Maildir 中的邮件未同步到数据库，尝试同步")
-					
+
 					// 读取邮件文件
 					mailData, err := u.maildir.ReadMail(u.user.Email, normalizedName, baseID)
 					if err == nil {
 						var fromHeader, toHeader, subject string
 						var bodyBytes []byte
-						
+
 						// 尝试使用 message.Read 解析
 						msg, err := message.Read(bytes.NewReader(mailData))
 						if err == nil {
@@ -204,13 +196,13 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 							fromHeader = header.Get("From")
 							toHeader = header.Get("To")
 							subject = header.Get("Subject")
-							
+
 							// 读取邮件体
 							if msg.Body != nil {
 								bodyBytes, _ = io.ReadAll(msg.Body)
 							}
 						}
-						
+
 						// 如果 message.Read 解析失败或邮件头为空，尝试手动解析
 						// 检查是否以 "This is a multi-part message" 开头（缺少邮件头）
 						mailDataStr := string(mailData)
@@ -259,7 +251,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 								bodyBytes = mailData
 							}
 						}
-						
+
 						// 解析 From 地址
 						fromAddr := fromHeader
 						if fromAddr == "" {
@@ -277,7 +269,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 						if fromAddr == "" || fromAddr == "<>" {
 							fromAddr = "unknown@unknown"
 						}
-						
+
 						// 解析 To 地址
 						toAddrs := []string{}
 						if toHeader != "" {
@@ -301,7 +293,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 						if len(toAddrs) == 0 {
 							toAddrs = []string{u.user.Email}
 						}
-						
+
 						// 确定标志（如果文件在 cur 目录且有 :2,S 后缀，说明已读）
 						var flags []string
 						if strings.Contains(filename, ":2,S") || strings.Contains(filename, ":2,RS") {
@@ -309,14 +301,14 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 						} else {
 							flags = []string{"\\Recent"}
 						}
-						
+
 						// 获取文件修改时间作为接收时间
 						fileInfo, err := entry.Info()
 						receivedAt := time.Now()
 						if err == nil {
 							receivedAt = fileInfo.ModTime()
 						}
-						
+
 						// 创建邮件记录
 						syncMail := &storage.Mail{
 							ID:         baseID,
@@ -331,7 +323,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 							ReceivedAt: receivedAt,
 							CreatedAt:  receivedAt,
 						}
-						
+
 						// 存储到数据库
 						if err := u.storage.StoreMail(ctx, syncMail); err != nil {
 							logger.Warn().Err(err).
@@ -355,7 +347,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 				}
 			}
 		}
-		
+
 		// 检查 new 目录中的文件，同步缺失的邮件到数据库
 		newEntries, err := os.ReadDir(newDir)
 		if err == nil {
@@ -368,7 +360,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 						baseID = filename[:idx]
 					}
 					newFileMap[baseID] = true
-					
+
 					// 如果文件不在数据库中，尝试同步
 					if !mailIDMap[baseID] && !mailIDMap[filename] {
 						logger.Debug().
@@ -376,13 +368,13 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 							Str("folder", normalizedName).
 							Str("filename", filename).
 							Msg("IMAP GetMailbox: 发现 new 目录中的邮件未同步到数据库，尝试同步")
-						
+
 						// 读取邮件文件
 						mailData, err := u.maildir.ReadMail(u.user.Email, normalizedName, baseID)
 						if err == nil {
 							var fromHeader, toHeader, subject string
 							var bodyBytes []byte
-							
+
 							// 尝试使用 message.Read 解析
 							msg, err := message.Read(bytes.NewReader(mailData))
 							if err == nil {
@@ -390,13 +382,13 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 								fromHeader = header.Get("From")
 								toHeader = header.Get("To")
 								subject = header.Get("Subject")
-								
+
 								// 读取邮件体
 								if msg.Body != nil {
 									bodyBytes, _ = io.ReadAll(msg.Body)
 								}
 							}
-							
+
 							// 如果 message.Read 解析失败或邮件头为空，尝试手动解析
 							// 检查是否以 "This is a multi-part message" 开头（缺少邮件头）
 							mailDataStr := string(mailData)
@@ -445,7 +437,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 									bodyBytes = mailData
 								}
 							}
-							
+
 							// 解析 From 地址
 							fromAddr := fromHeader
 							if fromAddr == "" {
@@ -463,7 +455,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 							if fromAddr == "" || fromAddr == "<>" {
 								fromAddr = "unknown@unknown"
 							}
-							
+
 							// 解析 To 地址
 							toAddrs := []string{}
 							if toHeader != "" {
@@ -485,14 +477,14 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 							if len(toAddrs) == 0 {
 								toAddrs = []string{u.user.Email}
 							}
-							
+
 							// 获取文件修改时间作为接收时间
 							fileInfo, err := entry.Info()
 							receivedAt := time.Now()
 							if err == nil {
 								receivedAt = fileInfo.ModTime()
 							}
-							
+
 							// 创建邮件记录（new 目录中的邮件是未读的）
 							syncMail := &storage.Mail{
 								ID:         baseID,
@@ -507,7 +499,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 								ReceivedAt: receivedAt,
 								CreatedAt:  receivedAt,
 							}
-							
+
 							// 存储到数据库
 							if err := u.storage.StoreMail(ctx, syncMail); err != nil {
 								logger.Warn().Err(err).
@@ -531,14 +523,14 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 					}
 				}
 			}
-			
+
 			// 检查数据库中的邮件，如果文件在 new 目录中但标志有 \Seen，需要修复
 			for _, mail := range mails {
 				baseID := mail.ID
 				if idx := strings.Index(mail.ID, ":"); idx >= 0 {
 					baseID = mail.ID[:idx]
 				}
-				
+
 				// 如果文件在 new 目录中，但标志有 \Seen，这是不一致的
 				if newFileMap[baseID] {
 					hasSeen := false
@@ -551,7 +543,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 							hasRecent = true
 						}
 					}
-					
+
 					// 如果文件在 new 目录中，但标志有 \Seen，移除 \Seen 标志
 					if hasSeen {
 						logger.Debug().
@@ -559,7 +551,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 							Str("folder", normalizedName).
 							Str("mail_id", baseID).
 							Msg("IMAP GetMailbox: 发现文件在 new 目录但标志有 \\Seen，修复标志")
-						
+
 						// 移除 \Seen 标志，保留 \Recent
 						newFlags := make([]string, 0)
 						for _, flag := range mail.Flags {
@@ -571,7 +563,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 						if !hasRecent {
 							newFlags = append(newFlags, imap.RecentFlag)
 						}
-						
+
 						if err := u.storage.UpdateMailFlags(ctx, mail.ID, newFlags); err != nil {
 							logger.Warn().Err(err).
 								Str("user", u.user.Email).
@@ -591,7 +583,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 				}
 			}
 		}
-		
+
 		// 重新排序邮件（按接收时间降序）
 		if len(mails) > 0 {
 			sort.Slice(mails, func(i, j int) bool {
@@ -616,7 +608,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 		// 如果邮件没有 \Seen 标志，且没有 \Recent 标志，自动设置 \Seen 标志（兼容 Foxmail）
 		if !hasSeen && !hasRecent {
 			newFlags := append(mail.Flags, imap.SeenFlag)
-			
+
 			// 如果邮件被标记为已读，且之前未读，需要从 new 移动到 cur
 			if u.maildir != nil {
 				// 去除可能的标志后缀（如 :2,S）
@@ -624,7 +616,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 				if idx := strings.Index(mail.ID, ":"); idx >= 0 {
 					baseID = mail.ID[:idx]
 				}
-				
+
 				// 检查文件是否在 new 目录中
 				userDir := u.maildir.GetUserMaildir(u.user.Email)
 				var newDir string
@@ -633,7 +625,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 				} else {
 					newDir = filepath.Join(userDir, "."+normalizedName, "new")
 				}
-				
+
 				newPath := filepath.Join(newDir, baseID)
 				if _, err := os.Stat(newPath); err == nil {
 					// 文件在 new 目录中，移动到 cur
@@ -652,7 +644,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 					}
 				}
 			}
-			
+
 			if err := u.storage.UpdateMailFlags(ctx, mail.ID, newFlags); err != nil {
 				logger.Warn().Err(err).Str("mail_id", mail.ID).Msg("自动设置 \\Seen 标志失败（GetMailbox）")
 			} else {
@@ -738,7 +730,7 @@ func (m *Mailbox) updateMailFlagsAndMove(ctx context.Context, mail *storage.Mail
 		if idx := strings.Index(mail.ID, ":"); idx >= 0 {
 			baseID = mail.ID[:idx]
 		}
-		
+
 		// 检查文件是否在 new 目录中
 		userDir := m.maildir.GetUserMaildir(m.userEmail)
 		var newDir string
@@ -747,7 +739,7 @@ func (m *Mailbox) updateMailFlagsAndMove(ctx context.Context, mail *storage.Mail
 		} else {
 			newDir = filepath.Join(userDir, "."+m.name, "new")
 		}
-		
+
 		newPath := filepath.Join(newDir, baseID)
 		if _, err := os.Stat(newPath); err == nil {
 			// 文件在 new 目录中，移动到 cur
@@ -866,13 +858,24 @@ func (m *Mailbox) Status(items []imap.StatusItem) (*imap.MailboxStatus, error) {
 				Uint32("unseen", unseenCount).
 				Msg("IMAP Status: Unseen 邮件数量")
 		case imap.StatusUidNext:
-			// 计算下一个 UID（即使邮箱为空，UID 也应该从 1 开始）
-			// #nosec G115 -- len() 返回的 int 在合理范围内，不会溢出 uint32
-			if len(m.mails)+1 <= int(^uint32(0)) {
-				status.UidNext = uint32(len(m.mails) + 1)
+			// 从存储层获取下一个 UID（即使邮箱为空，UID 也应该从 1 开始）
+			ctx := context.Background()
+			uidNext, err := m.storage.GetNextUID(ctx, m.userEmail, m.name)
+			if err != nil {
+				logger.Warn().Err(err).
+					Str("user", m.userEmail).
+					Str("folder", m.name).
+					Msg("获取下一个 UID 失败，使用 len(m.mails) + 1 作为后备")
+				// 后备方案：使用 len(m.mails) + 1
+				// #nosec G115 -- len() 返回的 int 在合理范围内，不会溢出 uint32
+				if len(m.mails)+1 <= int(^uint32(0)) {
+					status.UidNext = uint32(len(m.mails) + 1)
+				} else {
+					// 如果溢出，使用最大值
+					status.UidNext = ^uint32(0)
+				}
 			} else {
-				// 如果溢出，使用最大值
-				status.UidNext = ^uint32(0)
+				status.UidNext = uidNext
 			}
 			logger.Debug().
 				Str("user", m.userEmail).
@@ -880,7 +883,23 @@ func (m *Mailbox) Status(items []imap.StatusItem) (*imap.MailboxStatus, error) {
 				Uint32("uid_next", status.UidNext).
 				Msg("IMAP Status: UidNext")
 		case imap.StatusUidValidity:
-			status.UidValidity = 1
+			// 使用邮箱名称和用户邮箱的哈希值作为 UidValidity
+			// 这样可以确保在邮箱结构改变时（如邮件被删除或移动），UidValidity 会改变
+			// 使用简单的哈希算法：将邮箱名称和用户邮箱组合后计算哈希
+			hash := uint32(0)
+			for _, c := range m.userEmail + ":" + m.name {
+				hash = hash*31 + uint32(c)
+			}
+			// 确保 UidValidity 不为 0（IMAP 规范要求）
+			if hash == 0 {
+				hash = 1
+			}
+			status.UidValidity = hash
+			logger.Debug().
+				Str("user", m.userEmail).
+				Str("folder", m.name).
+				Uint32("uid_validity", status.UidValidity).
+				Msg("IMAP Status: UidValidity")
 		}
 	}
 
@@ -922,41 +941,57 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 		Strs("requested_items", itemNames).
 		Msg("IMAP ListMessages: 开始列出邮件")
 
-		// 严格按照 IMAP 规范，只返回客户端请求的字段
-		// 如果客户端需要更多字段，它会再次请求（如 UID FETCH 1:15 (UID RFC822.SIZE FLAGS BODY.PEEK[HEADER])）
-		// 不要添加额外字段，避免响应过大和字段顺序不一致导致客户端解析失败
-		
-		// 检查是否请求了 BODY 但没有请求 Envelope，如果是，也添加 Envelope
-		hasBodyRequest := false
-		hasEnvelopeRequest := false
-		for _, item := range items {
-			itemStr := string(item)
-			if strings.HasPrefix(itemStr, "BODY") || item == imap.FetchRFC822 || item == imap.FetchRFC822Text {
-				hasBodyRequest = true
-			}
-			if item == imap.FetchEnvelope {
-				hasEnvelopeRequest = true
-			}
+	// 严格按照 IMAP 规范，只返回客户端请求的字段
+	// 如果客户端需要更多字段，它会再次请求（如 UID FETCH 1:15 (UID RFC822.SIZE FLAGS BODY.PEEK[HEADER])）
+	// 不要添加额外字段，避免响应过大和字段顺序不一致导致客户端解析失败
+
+	// 检查是否请求了 BODY 但没有请求 Envelope，如果是，也添加 Envelope
+	hasBodyRequest := false
+	hasEnvelopeRequest := false
+	for _, item := range items {
+		itemStr := string(item)
+		if strings.HasPrefix(itemStr, "BODY") || item == imap.FetchRFC822 || item == imap.FetchRFC822Text {
+			hasBodyRequest = true
 		}
-		if hasBodyRequest && !hasEnvelopeRequest {
-			logger.Debug().
-				Str("user", m.userEmail).
-				Str("folder", m.name).
-				Msg("IMAP ListMessages: 客户端请求了 BODY 但没有请求 Envelope，添加 Envelope 以兼容")
-			// 添加 Envelope 到 items 列表
-			items = append(items, imap.FetchEnvelope)
+		if item == imap.FetchEnvelope {
+			hasEnvelopeRequest = true
 		}
+	}
+	if hasBodyRequest && !hasEnvelopeRequest {
+		logger.Debug().
+			Str("user", m.userEmail).
+			Str("folder", m.name).
+			Msg("IMAP ListMessages: 客户端请求了 BODY 但没有请求 Envelope，添加 Envelope 以兼容")
+		// 添加 Envelope 到 items 列表
+		items = append(items, imap.FetchEnvelope)
+	}
 
 	for i, mail := range m.mails {
 		// #nosec G115 -- 循环索引 i 在合理范围内，不会溢出 uint32
 		// 序列号始终是 i+1（从 1 开始）
 		seqNum := uint32(i + 1)
-		
+
 		// 确定用于匹配 seqSet 的数值
 		// - 如果 uid=false（普通 FETCH），seqSet 包含序列号，使用 seqNum 匹配
-		// - 如果 uid=true（UID FETCH），seqSet 包含 UID 值，使用 UID 匹配
-		// 目前我们使用序列号作为 UID（TODO: 使用实际的 UID），所以两种情况都使用 seqNum
-		checkNum := seqNum
+		// - 如果 uid=true（UID FETCH），seqSet 包含 UID 值，使用 mail.UID 匹配
+		var checkNum uint32
+		if uid {
+			// UID FETCH：使用实际的 UID
+			if mail.UID == 0 {
+				// 如果邮件没有 UID，使用序列号作为后备（不应该发生）
+				logger.Warn().
+					Str("user", m.userEmail).
+					Str("folder", m.name).
+					Str("mail_id", mail.ID).
+					Msg("邮件没有 UID，使用序列号作为后备")
+				checkNum = seqNum
+			} else {
+				checkNum = mail.UID
+			}
+		} else {
+			// 普通 FETCH：使用序列号
+			checkNum = seqNum
+		}
 
 		if seqSet != nil && !seqSet.Contains(checkNum) {
 			logger.Debug().
@@ -975,19 +1010,29 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 			SeqNum: seqNum,
 			Items:  make(map[imap.FetchItem]interface{}),
 			// go-imap 库在格式化时从这些字段读取，而不是从 msg.Items 读取
-			Envelope:     nil,
-			Flags:        nil,
-			InternalDate: time.Time{},
-			Size:         0,
-			Uid:          0,
-			BodyStructure: nil, // 需要在使用时初始化
-			Body:         make(map[*imap.BodySectionName]imap.Literal), // 用于存储 BODY.PEEK[1] 等请求
+			Envelope:      nil,
+			Flags:         nil,
+			InternalDate:  time.Time{},
+			Size:          0,
+			Uid:           0,
+			BodyStructure: nil,                                          // 需要在使用时初始化
+			Body:          make(map[*imap.BodySectionName]imap.Literal), // 用于存储 BODY.PEEK[1] 等请求
 		}
-		
+
 		// 预先设置 UID（必须在填充其他字段之前设置，确保 UID 在响应中正确显示）
 		// go-imap 库在格式化 FETCH 响应时，会优先显示 UID（如果存在）
-		msg.Uid = seqNum // TODO: 使用实际的 UID
-		
+		if mail.UID == 0 {
+			// 如果邮件没有 UID，使用序列号作为后备（不应该发生）
+			logger.Warn().
+				Str("user", m.userEmail).
+				Str("folder", m.name).
+				Str("mail_id", mail.ID).
+				Msg("邮件没有 UID，使用序列号作为后备")
+			msg.Uid = seqNum
+		} else {
+			msg.Uid = mail.UID
+		}
+
 		// 预先填充 Envelope（即使客户端没有请求，也填充以便客户端从邮件头解析时使用）
 		// 解析 From 地址
 		fromAddr := mail.From
@@ -1008,7 +1053,7 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 		if fromHost == "" {
 			fromHost = "unknown"
 		}
-		
+
 		// 解析 To 地址
 		toAddrs := make([]*imap.Address, 0)
 		if mail.To != nil {
@@ -1054,7 +1099,7 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 				HostName:    "unknown",
 			}}
 		}
-		
+
 		// 预先填充 Envelope（即使客户端没有请求）
 		msg.Envelope = &imap.Envelope{
 			Subject: mail.Subject,
@@ -1116,7 +1161,7 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 					Str("mail_id", mail.ID).
 					Strs("flags", flags).
 					Msg("IMAP ListMessages: 填充 Flags")
-				
+
 				// 如果邮件没有 \Seen 标志，且没有 \Recent 标志，说明是旧邮件
 				// 为了兼容 Foxmail，当客户端请求 FLAGS 时，也自动设置 \Seen 标志
 				hasSeen := false
@@ -1184,13 +1229,24 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 					Msg("IMAP ListMessages: 填充 RFC822Size")
 			case imap.FetchUid:
 				// go-imap 库从 msg.Uid 字段读取
-				msg.Uid = seqNum // TODO: 使用实际的 UID
-				msg.Items[item] = seqNum
+				if mail.UID == 0 {
+					// 如果邮件没有 UID，使用序列号作为后备（不应该发生）
+					logger.Warn().
+						Str("user", m.userEmail).
+						Str("folder", m.name).
+						Str("mail_id", mail.ID).
+						Msg("邮件没有 UID，使用序列号作为后备")
+					msg.Uid = seqNum
+					msg.Items[item] = seqNum
+				} else {
+					msg.Uid = mail.UID
+					msg.Items[item] = mail.UID
+				}
 				logger.Debug().
 					Str("user", m.userEmail).
 					Str("folder", m.name).
 					Str("mail_id", mail.ID).
-					Uint32("uid", seqNum).
+					Uint32("uid", msg.Uid).
 					Msg("IMAP ListMessages: 填充 Uid")
 			case imap.FetchBody, imap.FetchBodyStructure:
 				// go-imap 库从 msg.BodyStructure 字段读取，需要初始化
@@ -1223,7 +1279,7 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 					body, err := m.maildir.ReadMail(m.userEmail, m.name, mail.ID)
 					if err == nil {
 						msg.Items[item] = body
-						
+
 						// 根据 IMAP 规范，如果客户端使用 FETCH（不是 PEEK）获取邮件体，自动设置 \Seen 标志
 						// FetchRFC822 不是 PEEK，所以需要设置 \Seen
 						hasSeen := false
@@ -1281,7 +1337,7 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 								mail.Flags = newFlags
 							}
 						}
-						
+
 						logger.Debug().
 							Str("user", m.userEmail).
 							Str("folder", m.name).
@@ -1376,7 +1432,7 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 						literal := bytes.NewReader(literalData)
 						msg.Body[section] = literal
 						msg.Items[item] = literal
-						
+
 						// 如果客户端请求了 UID，确保 UID 也被包含在响应中
 						// go-imap 库在格式化 FETCH 响应时，需要 UID 在 msg.Items 中才能正确显示
 						// 注意：即使 msg.Uid 已设置（第966行），也必须添加到 msg.Items 中
@@ -1389,10 +1445,21 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 						}
 						if hasUIDRequest {
 							// 无论 msg.Items[imap.FetchUid] 是否已设置，都确保设置（因为可能先处理 BODY section）
-							msg.Uid = seqNum // 确保 msg.Uid 已设置
-							msg.Items[imap.FetchUid] = seqNum // 确保 UID 在 Items 中（go-imap 库需要这个）
+							if mail.UID == 0 {
+								// 如果邮件没有 UID，使用序列号作为后备（不应该发生）
+								logger.Warn().
+									Str("user", m.userEmail).
+									Str("folder", m.name).
+									Str("mail_id", mail.ID).
+									Msg("邮件没有 UID，使用序列号作为后备")
+								msg.Uid = seqNum
+								msg.Items[imap.FetchUid] = seqNum
+							} else {
+								msg.Uid = mail.UID
+								msg.Items[imap.FetchUid] = mail.UID
+							}
 						}
-						
+
 						// 根据 IMAP 规范，如果客户端使用 FETCH（不是 PEEK）获取邮件体，自动设置 \Seen 标志
 						// 为了兼容 Foxmail 等客户端，即使使用 PEEK，也设置 \Seen 标志
 						// 检查邮件是否已经有 \Seen 标志
@@ -1406,7 +1473,7 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 								hasRecent = true
 							}
 						}
-						
+
 						// 如果邮件还没有 \Seen 标志，设置它（即使使用 PEEK，也设置以兼容 Foxmail）
 						if !hasSeen {
 							ctx := context.Background()
@@ -1453,7 +1520,7 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 								mail.Flags = newFlags
 							}
 						}
-						
+
 						logger.Debug().
 							Str("user", m.userEmail).
 							Str("folder", m.name).
@@ -1593,16 +1660,51 @@ func (m *Mailbox) SearchMessages(uid bool, criteria *imap.SearchCriteria) ([]uin
 				}
 			}
 
-			// 检查序列号
+			// 检查序列号或 UID（根据 uid 参数）
 			if criteria.SeqNum != nil {
-				if !criteria.SeqNum.Contains(seqNum) {
+				var checkNum uint32
+				if uid {
+					// UID SEARCH：使用实际的 UID
+					if mail.UID == 0 {
+						// 如果邮件没有 UID，使用序列号作为后备（不应该发生）
+						logger.Warn().
+							Str("user", m.userEmail).
+							Str("folder", m.name).
+							Str("mail_id", mail.ID).
+							Msg("邮件没有 UID，使用序列号作为后备")
+						checkNum = seqNum
+					} else {
+						checkNum = mail.UID
+					}
+				} else {
+					// 普通 SEARCH：使用序列号
+					checkNum = seqNum
+				}
+				if !criteria.SeqNum.Contains(checkNum) {
 					matched = false
 				}
 			}
 		}
 
 		if matched {
-			results = append(results, seqNum)
+			// 根据 uid 参数返回 UID 或序列号
+			if uid {
+				// UID SEARCH：返回实际的 UID
+				if mail.UID == 0 {
+					// 如果邮件没有 UID，使用序列号作为后备（不应该发生）
+					logger.Warn().
+						Str("user", m.userEmail).
+						Str("folder", m.name).
+						Str("mail_id", mail.ID).
+						Msg("邮件没有 UID，使用序列号作为后备")
+					results = append(results, seqNum)
+				} else {
+					results = append(results, mail.UID)
+				}
+			} else {
+				// 普通 SEARCH：返回序列号
+				results = append(results, seqNum)
+			}
 		}
 	}
 
@@ -1830,8 +1932,30 @@ func (m *Mailbox) UpdateMessagesFlags(uid bool, seqSet *imap.SeqSet, op imap.Fla
 	for i, mail := range m.mails {
 		// #nosec G115 -- 循环索引 i 在合理范围内，不会溢出 uint32
 		seqNum := uint32(i + 1)
-		if seqSet != nil && !seqSet.Contains(seqNum) {
-			continue
+
+		// 根据 uid 参数确定用于匹配 seqSet 的数值
+		if seqSet != nil {
+			var checkNum uint32
+			if uid {
+				// UID STORE：使用实际的 UID
+				if mail.UID == 0 {
+					// 如果邮件没有 UID，使用序列号作为后备（不应该发生）
+					logger.Warn().
+						Str("user", m.userEmail).
+						Str("folder", m.name).
+						Str("mail_id", mail.ID).
+						Msg("邮件没有 UID，使用序列号作为后备")
+					checkNum = seqNum
+				} else {
+					checkNum = mail.UID
+				}
+			} else {
+				// 普通 STORE：使用序列号
+				checkNum = seqNum
+			}
+			if !seqSet.Contains(checkNum) {
+				continue
+			}
 		}
 
 		var newFlags []string
@@ -1899,8 +2023,30 @@ func (m *Mailbox) CopyMessages(uid bool, seqSet *imap.SeqSet, dest string) error
 	for i, mail := range m.mails {
 		// #nosec G115 -- 循环索引 i 在合理范围内，不会溢出 uint32
 		seqNum := uint32(i + 1)
-		if seqSet != nil && !seqSet.Contains(seqNum) {
-			continue
+
+		// 根据 uid 参数确定用于匹配 seqSet 的数值
+		if seqSet != nil {
+			var checkNum uint32
+			if uid {
+				// UID COPY：使用实际的 UID
+				if mail.UID == 0 {
+					// 如果邮件没有 UID，使用序列号作为后备（不应该发生）
+					logger.Warn().
+						Str("user", m.userEmail).
+						Str("folder", m.name).
+						Str("mail_id", mail.ID).
+						Msg("邮件没有 UID，使用序列号作为后备")
+					checkNum = seqNum
+				} else {
+					checkNum = mail.UID
+				}
+			} else {
+				// 普通 COPY：使用序列号
+				checkNum = seqNum
+			}
+			if !seqSet.Contains(checkNum) {
+				continue
+			}
 		}
 
 		// 创建新邮件副本
@@ -1922,7 +2068,10 @@ func (m *Mailbox) CopyMessages(uid bool, seqSet *imap.SeqSet, dest string) error
 		// 生成新 ID
 		newMail.ID = fmt.Sprintf("%s-%d", dest, len(destMails)+1)
 
-		// 存储到目标邮箱
+		// 为新邮件分配 UID（StoreMail 会自动分配，但这里显式设置为 0 以确保自动分配）
+		newMail.UID = 0
+
+		// 存储到目标邮箱（StoreMail 会自动分配新的 UID）
 		if err := m.storage.StoreMail(ctx, newMail); err != nil {
 			return fmt.Errorf("复制邮件失败: %w", err)
 		}
