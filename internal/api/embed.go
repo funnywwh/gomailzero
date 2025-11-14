@@ -5,5 +5,5 @@ package api
 
 import "embed"
 
-//go:embed all:static
+//go:embed static
 var staticFiles embed.FS

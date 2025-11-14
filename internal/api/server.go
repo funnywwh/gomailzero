@@ -48,8 +48,11 @@ func NewServer(cfg *Config) *Server {
 	router.Use(loggerMiddleware())
 
 	// 静态文件服务（管理界面）
-	// go:embed static/* 会包含 static/ 前缀，所以直接使用
-	router.StaticFS("/admin/static", http.FS(staticFiles))
+	// go:embed static 会包含 static/ 前缀，使用 fs.Sub 创建子文件系统
+	staticFS, err := fs.Sub(staticFiles, "static")
+	if err == nil {
+		router.StaticFS("/admin/static", http.FS(staticFS))
+	}
 	// 支持 /admin/assets 路径（前端资源），映射到 static/assets
 	assetsFS, err := fs.Sub(staticFiles, "static/assets")
 	if err == nil {
