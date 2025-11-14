@@ -18,6 +18,11 @@ jobs:
         with:
           go-version: '1.23'
       
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
@@ -27,6 +32,21 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
+      
+      - name: Cache Node modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            admin/node_modules
+            webmail/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json', '**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      
+      - name: Build frontend
+        run: |
+          cd admin && npm ci && npm run build
+          cd ../webmail && if [ -f yarn.lock ]; then yarn install --frozen-lockfile && yarn build; else npm ci && npm run build; fi
       
       - name: Download dependencies
         run: go mod download
@@ -69,6 +89,26 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23'
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Cache Node modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            admin/node_modules
+            webmail/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json', '**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      
+      - name: Build frontend
+        run: |
+          cd admin && npm ci && npm run build
+          cd ../webmail && if [ -f yarn.lock ]; then yarn install --frozen-lockfile && yarn build; else npm ci && npm run build; fi
       
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
