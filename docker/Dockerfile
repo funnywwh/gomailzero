@@ -3,8 +3,8 @@
 # 构建阶段
 FROM golang:1.24-alpine AS builder
 
-# 安装必要的构建工具
-RUN apk add --no-cache git make
+# 安装必要的构建工具（包括 Node.js 和 npm）
+RUN apk add --no-cache git make nodejs npm yarn
 
 # 设置工作目录
 WORKDIR /build
@@ -17,6 +17,10 @@ RUN go mod tidy && go mod download
 
 # 复制源代码
 COPY . .
+
+# 构建前端（必须在 Go 构建之前，因为 go:embed 需要 static 目录）
+RUN cd admin && npm ci && npm run build || (echo "Admin frontend build failed" && exit 1)
+RUN cd webmail && if [ -f yarn.lock ]; then yarn install --frozen-lockfile && yarn build; else npm ci && npm run build; fi || (echo "Webmail frontend build failed" && exit 1)
 
 # 构建二进制文件
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
