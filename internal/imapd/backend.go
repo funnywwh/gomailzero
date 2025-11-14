@@ -1080,6 +1080,61 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 				})
 			}
 		}
+
+		// 解析 Cc 地址
+		ccAddrs := make([]*imap.Address, 0)
+		if mail.Cc != nil {
+			for _, cc := range mail.Cc {
+				ccAddr := cc
+				if ccAddr == "" {
+					continue
+				}
+				if idx := strings.Index(cc, "<"); idx >= 0 {
+					if idx2 := strings.Index(cc, ">"); idx2 > idx {
+						ccAddr = cc[idx+1 : idx2]
+					}
+				}
+				ccMailbox, ccHost := parseEmailAddress(ccAddr)
+				if ccMailbox == "" {
+					continue
+				}
+				if ccHost == "" {
+					ccHost = "unknown"
+				}
+				ccAddrs = append(ccAddrs, &imap.Address{
+					MailboxName: ccMailbox,
+					HostName:    ccHost,
+				})
+			}
+		}
+
+		// 解析 Bcc 地址
+		bccAddrs := make([]*imap.Address, 0)
+		if mail.Bcc != nil {
+			for _, bcc := range mail.Bcc {
+				bccAddr := bcc
+				if bccAddr == "" {
+					continue
+				}
+				if idx := strings.Index(bcc, "<"); idx >= 0 {
+					if idx2 := strings.Index(bcc, ">"); idx2 > idx {
+						bccAddr = bcc[idx+1 : idx2]
+					}
+				}
+				bccMailbox, bccHost := parseEmailAddress(bccAddr)
+				if bccMailbox == "" {
+					continue
+				}
+				if bccHost == "" {
+					bccHost = "unknown"
+				}
+				bccAddrs = append(bccAddrs, &imap.Address{
+					MailboxName: bccMailbox,
+					HostName:    bccHost,
+				})
+			}
+		}
+
 		// 确保 Date 不是零值
 		date := mail.ReceivedAt
 		if date.IsZero() {
@@ -1100,12 +1155,31 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 			}}
 		}
 
-		// 预先填充 Envelope（即使客户端没有请求）
-		msg.Envelope = &imap.Envelope{
-			Subject: mail.Subject,
-			From:    fromAddrs,
-			To:      toAddrs,
-			Date:    date,
+		// 检查是否请求了 Envelope
+		hasEnvelopeRequest := false
+		for _, item := range items {
+			if item == imap.FetchEnvelope {
+				hasEnvelopeRequest = true
+				break
+			}
+		}
+
+		// 根据 RFC 3501，服务器应该只返回客户端请求的字段
+		// 但是，为了兼容性，如果客户端请求了 BODY 但没有请求 Envelope，也添加 Envelope
+		// 这是因为很多客户端在请求 BODY 时也期望得到 Envelope
+		if hasEnvelopeRequest || hasBodyRequest {
+			// 预先填充 Envelope（如果客户端请求了 Envelope 或 BODY）
+			// 根据 RFC 3501，Envelope 应包含所有标准字段（如果可用）
+			msg.Envelope = &imap.Envelope{
+				Subject: mail.Subject,
+				From:    fromAddrs,
+				To:      toAddrs,
+				Cc:      ccAddrs,
+				Bcc:     bccAddrs,
+				Date:    date,
+				// 注意：Reply-To, In-Reply-To, Message-ID, References, Sender 等字段
+				// 需要从原始邮件头中解析，目前我们未存储完整邮件头，所以暂时不填充
+			}
 		}
 
 		// 记录处理的邮件
@@ -1460,8 +1534,8 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 							}
 						}
 
-						// 根据 IMAP 规范，如果客户端使用 FETCH（不是 PEEK）获取邮件体，自动设置 \Seen 标志
-						// 为了兼容 Foxmail 等客户端，即使使用 PEEK，也设置 \Seen 标志
+						// 根据 IMAP 规范（RFC 3501），只有使用 FETCH（不是 PEEK）获取邮件体时，才自动设置 \Seen 标志
+						// BODY.PEEK 明确表示"不设置 \Seen 标志"，必须严格遵守
 						// 检查邮件是否已经有 \Seen 标志
 						hasSeen := false
 						hasRecent := false
@@ -1474,8 +1548,8 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 							}
 						}
 
-						// 如果邮件还没有 \Seen 标志，设置它（即使使用 PEEK，也设置以兼容 Foxmail）
-						if !hasSeen {
+						// 只有当不是 PEEK 时，才设置 \Seen 标志（符合 RFC 3501）
+						if !section.Peek && !hasSeen {
 							ctx := context.Background()
 							newFlags := append(mail.Flags, imap.SeenFlag)
 							// 移除 \Recent 标志（如果存在）
@@ -1499,7 +1573,7 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 									Str("folder", m.name).
 									Str("mail_id", mail.ID).
 									Bool("peek", section.Peek).
-									Msg("IMAP ListMessages: 自动设置 \\Seen 标志")
+									Msg("IMAP ListMessages: 自动设置 \\Seen 标志（非 PEEK）")
 							}
 						} else if hasRecent {
 							// 如果邮件已经有 \Seen 标志，但还有 \Recent 标志，移除 \Recent 标志
@@ -1660,6 +1734,85 @@ func (m *Mailbox) SearchMessages(uid bool, criteria *imap.SearchCriteria) ([]uin
 				}
 			}
 
+			// 检查文本（header + body）
+			if len(criteria.Text) > 0 {
+				textMatched := false
+				// 组合主题和正文进行搜索
+				textStr := mail.Subject + " " + string(mail.Body)
+				for _, searchText := range criteria.Text {
+					if contains(textStr, searchText) {
+						textMatched = true
+						break
+					}
+				}
+				if !textMatched {
+					matched = false
+				}
+			}
+
+			// 检查内部日期（Since - 在指定日期之后）
+			if !criteria.Since.IsZero() {
+				mailDate := mail.ReceivedAt
+				if mailDate.IsZero() {
+					mailDate = mail.CreatedAt
+				}
+				if mailDate.Before(criteria.Since) {
+					matched = false
+				}
+			}
+
+			// 检查内部日期（Before - 在指定日期之前）
+			if !criteria.Before.IsZero() {
+				mailDate := mail.ReceivedAt
+				if mailDate.IsZero() {
+					mailDate = mail.CreatedAt
+				}
+				// Before 表示日期早于指定日期（不包含指定日期）
+				// 所以如果 mailDate >= criteria.Before，则不匹配
+				if !mailDate.Before(criteria.Before) {
+					matched = false
+				}
+			}
+
+			// 检查发送日期（SentSince - 在指定日期之后）
+			// 注意：我们使用 ReceivedAt 作为发送日期的近似值
+			if !criteria.SentSince.IsZero() {
+				mailDate := mail.ReceivedAt
+				if mailDate.IsZero() {
+					mailDate = mail.CreatedAt
+				}
+				if mailDate.Before(criteria.SentSince) {
+					matched = false
+				}
+			}
+
+			// 检查发送日期（SentBefore - 在指定日期之前）
+			// 注意：我们使用 ReceivedAt 作为发送日期的近似值
+			if !criteria.SentBefore.IsZero() {
+				mailDate := mail.ReceivedAt
+				if mailDate.IsZero() {
+					mailDate = mail.CreatedAt
+				}
+				// SentBefore 表示日期早于指定日期（不包含指定日期）
+				if !mailDate.Before(criteria.SentBefore) {
+					matched = false
+				}
+			}
+
+			// 检查邮件大小（Larger - 大于指定字节数）
+			if criteria.Larger > 0 {
+				if mail.Size <= int64(criteria.Larger) {
+					matched = false
+				}
+			}
+
+			// 检查邮件大小（Smaller - 小于指定字节数）
+			if criteria.Smaller > 0 {
+				if mail.Size >= int64(criteria.Smaller) {
+					matched = false
+				}
+			}
+
 			// 检查序列号或 UID（根据 uid 参数）
 			if criteria.SeqNum != nil {
 				var checkNum uint32
@@ -1711,18 +1864,15 @@ func (m *Mailbox) SearchMessages(uid bool, criteria *imap.SearchCriteria) ([]uin
 	return results, nil
 }
 
-// contains 检查字符串是否包含子串（不区分大小写）
+// contains 检查字符串是否包含子串（不区分大小写，符合 RFC 3501 SEARCH 命令要求）
 func contains(s, substr string) bool {
 	if len(s) < len(substr) {
 		return false
 	}
-	// 使用简单的字符串包含检查（区分大小写）
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	// 转换为小写进行不区分大小写的比较（符合 IMAP SEARCH 命令规范）
+	sLower := strings.ToLower(s)
+	substrLower := strings.ToLower(substr)
+	return strings.Contains(sLower, substrLower)
 }
 
 // CreateMessage 创建邮件（用于 IMAP APPEND 命令，发送邮件）
