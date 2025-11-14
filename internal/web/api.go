@@ -116,7 +116,7 @@ func listMailsHandler(driver storage.Driver) gin.HandlerFunc {
 		mails, err := driver.ListMails(ctx, email, folder, limit, offset)
 		if err != nil {
 			// 记录详细错误信息
-			c.Error(err)
+			_ = c.Error(err) // #nosec G104 -- c.Error 用于记录错误，返回值不需要检查
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": err.Error(),
 			})
@@ -748,6 +748,7 @@ func initSystemHandler(driver storage.Driver, jwtManager *auth.JWTManager, domai
 			if err := driver.CreateDomain(ctx, domainObj); err != nil {
 				// 域名创建失败不影响初始化，只记录警告
 				// 可以继续
+				_ = err // #nosec G104 -- 域名创建失败不影响初始化流程
 			}
 		}
 

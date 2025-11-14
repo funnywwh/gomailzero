@@ -370,10 +370,8 @@ func (s *Session) generateMessageID() string {
 	
 	// 获取主机名
 	hostname := "localhost"
-	if s.backend.maildir != nil {
-		// 尝试从配置中获取域名
-		// 这里简化处理，使用 localhost
-	}
+	// 如果将来需要从 maildir 配置中获取域名，可以在这里添加逻辑
+	_ = s.backend.maildir // 避免未使用变量警告
 	
 	timestamp := time.Now().UnixNano()
 	return fmt.Sprintf("<%d.%s@%s>", timestamp, random, hostname)

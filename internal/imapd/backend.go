@@ -279,7 +279,7 @@ func (u *User) GetMailbox(name string) (backend.Mailbox, error) {
 						}
 						
 						// 确定标志（如果文件在 cur 目录且有 :2,S 后缀，说明已读）
-						flags := []string{}
+						var flags []string
 						if strings.Contains(filename, ":2,S") || strings.Contains(filename, ":2,RS") {
 							flags = []string{"\\Seen"}
 						} else {
@@ -1078,7 +1078,7 @@ func (m *Mailbox) ListMessages(uid bool, seqSet *imap.SeqSet, items []imap.Fetch
 					Str("subject", msg.Envelope.Subject).
 					Str("item", string(item)).
 					Bool("envelope_nil", msg.Envelope == nil).
-					Bool("envelope_from_nil", msg.Envelope != nil && (msg.Envelope.From == nil || len(msg.Envelope.From) == 0)).
+					Bool("envelope_from_nil", msg.Envelope != nil && len(msg.Envelope.From) == 0). // len() 对 nil slice 返回 0
 					Int("items_count", len(msg.Items)).
 					Msg("IMAP ListMessages: 填充 Envelope")
 			case imap.FetchFlags:

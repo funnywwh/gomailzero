@@ -552,6 +552,7 @@ func initSystemHandler(driver storage.Driver, jwtManager *auth.JWTManager, domai
 			if err := driver.CreateDomain(ctx, domainObj); err != nil {
 				// 域名创建失败不影响初始化，只记录警告
 				// 可以继续
+				_ = err // #nosec G104 -- 域名创建失败不影响初始化流程
 			}
 		}
 

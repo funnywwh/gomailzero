@@ -90,7 +90,7 @@ func jwtMiddleware(jwtManager *auth.JWTManager, driver storage.Driver) gin.Handl
 				})
 			} else {
 				// 其他错误（如数据库连接错误）返回 500
-				c.Error(err)
+				_ = c.Error(err) // #nosec G104 -- c.Error 用于记录错误，返回值不需要检查
 				c.JSON(http.StatusInternalServerError, gin.H{
 					"error": "验证用户失败",
 				})
